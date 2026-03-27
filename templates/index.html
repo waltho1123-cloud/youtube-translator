@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <title>YouTube 英中影片翻譯器</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; }
+        .glass {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa);
+            background-size: 200% 100%;
+            animation: shimmer 2s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        .step-active { border-color: #6366f1; color: #a5b4fc; }
+        .step-done { border-color: #22c55e; color: #86efac; background: rgba(34,197,94,0.1); }
+        .step-waiting { border-color: #334155; color: #64748b; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 24px; height: 24px;
+            background: #6366f1; border-radius: 50%; cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 24px; height: 24px;
+            background: #6366f1; border-radius: 50%; cursor: pointer; border: none;
+        }
+        input[type="range"] {
+            -webkit-appearance: none; height: 6px; border-radius: 3px;
+            background: #334155; outline: none;
+        }
+        .ck { -webkit-appearance: checkbox !important; appearance: checkbox !important;
+              width: 18px !important; height: 18px !important; opacity: 1 !important;
+              position: static !important; accent-color: #6366f1; cursor: pointer; }
+        .tab-active { background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; }
+        .tab-inactive { border-color: #334155; color: #64748b; }
+        .tab-inactive:hover { border-color: #475569; color: #94a3b8; }
+        .video-wrapper {
+            position: relative; padding-bottom: 56.25%; height: 0;
+            overflow: hidden; border-radius: 0.75rem; background: #000;
+        }
+        .video-wrapper iframe { position: absolute; top:0; left:0; width:100%; height:100%; }
+        @media (prefers-reduced-motion: reduce) {
+            .progress-bar { animation: none; }
+            .fade-in { animation: none; }
+        }
+        .subtitle-overlay {
+            position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
+            z-index: 10; text-align: center; pointer-events: none; max-width: 94%;
+        }
+        .subtitle-zh {
+            font-size: clamp(0.75rem, 2.5vw, 1.1rem); font-weight: 600; color: #fff;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.55); padding: 6px 16px; border-radius: 8px;
+            display: inline-block; line-height: 1.5;
+        }
+        .subtitle-en {
+            font-size: clamp(0.65rem, 2vw, 0.95rem); color: #d1d5db;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8); margin-top: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-200 flex items-start justify-center p-3 pt-6 sm:p-4 sm:pt-12">
+
+<main class="w-full max-w-3xl space-y-6">
+    <!-- Header -->
+    <div class="text-center space-y-2">
+        <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white">YouTube 英中影片翻譯器</h1>
+        <p class="text-gray-400">貼上 YouTube 連結，即時語音翻譯或下載完整翻譯影片</p>
+    </div>
+
+    <!-- URL Input -->
+    <div class="glass rounded-2xl p-4 sm:p-6">
+        <label class="block text-sm font-medium text-gray-300 mb-2">YouTube 影片網址</label>
+        <input id="urlInput" type="url" placeholder="https://www.youtube.com/watch?v=..."
+               class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                      placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+    </div>
+
+    <!-- Video Player -->
+    <div id="playerSection" class="glass rounded-2xl p-4 hidden fade-in">
+        <div class="video-wrapper">
+            <div id="ytPlayer"></div>
+            <div id="subtitleOverlay" class="subtitle-overlay" style="display:none;">
+                <div id="subtitleZh" class="subtitle-zh"></div>
+                <div id="subtitleEn" class="subtitle-en"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controlSection" class="glass rounded-2xl p-6 space-y-5 hidden fade-in">
+        <!-- Tabs -->
+        <div class="flex gap-3">
+            <button id="tabLive" onclick="setMode('live')"
+                    class="tab-active flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]">
+                即時語音翻譯
+            </button>
+            <button id="tabFull" onclick="setMode('full')"
+                    class="tab-inactive flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]">
+                完整翻譯下載
+            </button>
+        </div>
+
+        <!-- Live mode options -->
+        <div id="liveOptions">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">配音語音</label>
+                    <select id="liveVoiceSelect"
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                                   focus:outline-none focus:border-indigo-500">
+                        <option value="rachel">Rachel (女聲 - 沉穩)</option>
+                        <option value="bella">Bella (女聲 - 柔和)</option>
+                        <option value="josh">Josh (男聲 - 低沉)</option>
+                        <option value="antoni">Antoni (男聲 - 友善)</option>
+                        <option value="adam">Adam (男聲 - 深沉)</option>
+                        <option value="sam">Sam (男聲 - 沙啞)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        原音音量 <span id="liveVolLabel" class="text-indigo-400">0%</span>
+                    </label>
+                    <input id="liveVolSlider" type="range" min="0" max="100" value="0"
+                           class="w-full mt-3">
+                </div>
+            </div>
+            <div class="flex gap-6 flex-wrap mt-4">
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="liveSubtitleToggle" type="checkbox" checked class="ck">
+                    <span class="text-sm text-gray-300">顯示中文字幕</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="liveEnSubtitleToggle" type="checkbox" checked class="ck">
+                    <span class="text-sm text-gray-300">顯示英文字幕</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="liveKeepBgToggle" type="checkbox" class="ck">
+                    <span class="text-sm text-gray-300">保留背景音樂</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Full mode options -->
+        <div id="fullOptions" class="hidden space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">配音語音</label>
+                    <select id="voiceSelect"
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                                   focus:outline-none focus:border-indigo-500">
+                        <option value="rachel">Rachel (女聲 - 沉穩)</option>
+                        <option value="bella">Bella (女聲 - 柔和)</option>
+                        <option value="josh">Josh (男聲 - 低沉)</option>
+                        <option value="antoni">Antoni (男聲 - 友善)</option>
+                        <option value="adam">Adam (男聲 - 深沉)</option>
+                        <option value="sam">Sam (男聲 - 沙啞)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">影片畫質</label>
+                    <select id="qualitySelect"
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                                   focus:outline-none focus:border-indigo-500">
+                        <option value="1080">1080p HD</option>
+                        <option value="720" selected>720p</option>
+                        <option value="480">480p</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        原音量 <span id="volumeLabel" class="text-indigo-400">0%</span>
+                    </label>
+                    <input id="volumeSlider" type="range" min="0" max="50" value="0"
+                           class="w-full mt-3">
+                </div>
+            </div>
+            <div class="flex gap-6 flex-wrap">
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="subtitleToggle" type="checkbox" class="ck">
+                    <span class="text-sm text-gray-300">燒錄中文字幕</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="engSubtitleToggle" type="checkbox" class="ck">
+                    <span class="text-sm text-gray-300">燒錄英文字幕</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer select-none min-h-[44px]">
+                    <input id="keepBgToggle" type="checkbox" class="ck">
+                    <span class="text-sm text-gray-300">保留背景音樂</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Start Button -->
+        <button id="startBtn" onclick="startTranslation()"
+                class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold
+                       rounded-xl transition-colors duration-200 flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span id="startBtnText">開始即時語音翻譯</span>
+        </button>
+    </div>
+
+    <!-- Progress -->
+    <div id="progressSection" class="glass rounded-2xl p-6 space-y-5 hidden fade-in">
+        <div id="videoTitle" class="text-white font-medium hidden"></div>
+        <div>
+            <div class="flex justify-between text-sm mb-2">
+                <span id="progressMsg" class="text-gray-400">準備中...</span>
+                <span id="progressPct" class="text-indigo-400 font-mono">0%</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                <div id="progressBar" class="progress-bar h-full rounded-full transition-all duration-500"
+                     style="width: 0%"></div>
+            </div>
+        </div>
+        <div id="stepsContainer" class="flex justify-between gap-2 text-xs overflow-x-auto"></div>
+        <div id="previewSection" class="hidden fade-in">
+            <h3 class="text-sm font-medium text-gray-300 mb-2">翻譯預覽</h3>
+            <div id="previewTable" class="space-y-1 max-h-48 overflow-y-auto text-sm"></div>
+        </div>
+        <div id="logSection" class="space-y-1 text-sm max-h-32 overflow-y-auto"></div>
+    </div>
+
+    <!-- Live Result -->
+    <div id="liveResultSection" class="glass rounded-2xl p-6 hidden fade-in">
+        <div class="text-center space-y-3">
+            <div class="text-4xl text-green-400">&#10003;</div>
+            <h2 class="text-lg font-bold text-green-400">語音翻譯就緒！</h2>
+            <p class="text-gray-400 text-sm">播放上方影片即可聽到即時中文配音</p>
+            <p id="liveSegmentCount" class="text-gray-500 text-xs"></p>
+            <button onclick="resetForm()"
+                    class="text-gray-400 hover:text-white text-sm mt-2 underline">翻譯另一部影片</button>
+        </div>
+    </div>
+
+    <!-- Full Result -->
+    <div id="resultSection" class="glass rounded-2xl p-6 hidden fade-in">
+        <div class="text-center space-y-4">
+            <div class="text-5xl">&#10003;</div>
+            <h2 class="text-xl font-bold text-green-400">翻譯完成！</h2>
+            <p id="resultInfo" class="text-gray-400"></p>
+            <a id="downloadBtn" href="#"
+               class="inline-block px-8 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold
+                      rounded-xl transition-colors duration-200">下載影片</a>
+            <br>
+            <button onclick="resetForm()"
+                    class="text-gray-400 hover:text-white text-sm mt-2 underline">翻譯另一部影片</button>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorSection" class="glass rounded-2xl p-6 hidden fade-in border border-red-500/30">
+        <div class="text-center space-y-3">
+            <div class="text-4xl">&#9888;</div>
+            <h2 class="text-lg font-bold text-red-400">處理失敗</h2>
+            <p id="errorMsg" class="text-gray-400 text-sm"></p>
+            <button onclick="resetForm()"
+                    class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm">重試</button>
+        </div>
+    </div>
+</main>
+
+<!-- YouTube IFrame API -->
+<script>
+var tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+var player = null, ytReady = false;
+function onYouTubeIframeAPIReady() { ytReady = true; }
+</script>
+
+<script>
+(function() {
+// ── State ──
+let currentMode = 'live';
+let currentVideoId = null;
+let translatedSegments = [];
+let syncTimer = null;
+let currentTtsAudio = null;
+let currentTtsIndex = -1;
+let bgAudio = null;  // Background music/sfx accompaniment track
+let currentStep = null;
+let eventSource = null;
+let audioCtx = null;  // AudioContext for unlocking autoplay
+
+const LIVE_STEPS = ['download', 'transcribe', 'translate', 'tts'];
+let FULL_STEPS = ['download', 'transcribe', 'translate', 'tts', 'compose'];
+
+const STEP_LABELS = {
+    download: '下載音訊', separate: '音源分離', transcribe: '語音辨識', translate: '翻譯',
+    tts: '語音合成', compose: '合成影片',
+};
+const STEP_MESSAGES = {
+    download: '下載音訊中...', separate: '音源分離中 (Demucs)...',
+    transcribe: '語音辨識中 (Whisper)...', translate: '翻譯中 (GPT)...',
+    tts: '語音合成中 (ElevenLabs)...', compose: '合成影片中...',
+};
+
+// ── Unlock audio on first user interaction ──
+function unlockAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    // Also create + play a silent buffer to fully unlock Audio elements
+    const silence = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = silence;
+    src.connect(audioCtx.destination);
+    src.start();
+}
+document.addEventListener('click', unlockAudio, { once: true });
+window.addEventListener('beforeunload', () => {
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    stopSync(); stopCurrentTts();
+    if (bgAudio) { bgAudio.pause(); bgAudio = null; }
+});
+
+// ── URL → Auto Embed ──
+const urlInput = document.getElementById('urlInput');
+urlInput.addEventListener('input', debounceEmbed);
+urlInput.addEventListener('paste', () => setTimeout(debounceEmbed, 100));
+
+let urlTimer = null;
+function debounceEmbed() {
+    clearTimeout(urlTimer);
+    urlTimer = setTimeout(() => {
+        const vid = extractVideoId(urlInput.value.trim());
+        if (vid && vid !== currentVideoId) embedVideo(vid);
+    }, 400);
+}
+
+function extractVideoId(url) {
+    if (!url) return null;
+    const m = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+}
+
+function embedVideo(videoId) {
+    currentVideoId = videoId;
+    translatedSegments = [];
+    stopSync();
+
+    document.getElementById('playerSection').classList.remove('hidden');
+    document.getElementById('controlSection').classList.remove('hidden');
+
+    // IMPORTANT: player.destroy() removes the div from DOM — must recreate it
+    if (player) {
+        player.destroy();
+        player = null;
+    }
+    // Always ensure the target div exists
+    let targetDiv = document.getElementById('ytPlayer');
+    if (!targetDiv) {
+        targetDiv = document.createElement('div');
+        targetDiv.id = 'ytPlayer';
+        const wrapper = document.querySelector('.video-wrapper');
+        wrapper.insertBefore(targetDiv, document.getElementById('subtitleOverlay'));
+    }
+
+    function create() {
+        player = new YT.Player('ytPlayer', {
+            videoId: videoId,
+            playerVars: { autoplay: 0, cc_load_policy: 0, modestbranding: 1, rel: 0 },
+        });
+    }
+
+    if (ytReady) create();
+    else {
+        let attempts = 0;
+        const c = setInterval(() => {
+            if (ytReady) { clearInterval(c); create(); }
+            else if (++attempts > 50) { clearInterval(c); }
+        }, 200);
+    }
+}
+
+// ── TTS + Subtitle Sync (polling-based, no event dependency) ──
+function startSync() {
+    stopSync();
+
+    syncTimer = setInterval(() => {
+        if (!player || typeof player.getCurrentTime !== 'function') return;
+        if (translatedSegments.length === 0) return;
+
+        // Check player state via polling (don't rely on events)
+        let state;
+        try { state = player.getPlayerState(); } catch(e) { return; }
+
+        const liveVol = parseInt(document.getElementById('liveVolSlider').value);
+        const showZh = document.getElementById('liveSubtitleToggle').checked;
+        const showEn = document.getElementById('liveEnSubtitleToggle').checked;
+
+        if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
+            if (currentTtsAudio) currentTtsAudio.pause();
+            if (bgAudio && !bgAudio.paused) bgAudio.pause();
+            return;
+        }
+        if (state !== YT.PlayerState.PLAYING) return;
+
+        // Sync background music with video
+        if (bgAudio) {
+            try { player.setVolume(0); } catch(e) {}  // Mute original (has vocals)
+            if (bgAudio.paused) {
+                bgAudio.currentTime = player.getCurrentTime();
+                bgAudio.play().catch(() => {});
+            } else if (Math.abs(bgAudio.currentTime - player.getCurrentTime()) > 0.5) {
+                bgAudio.currentTime = player.getCurrentTime();
+            }
+        }
+
+        const t = player.getCurrentTime();
+        const idx = translatedSegments.findIndex(s => t >= s.start && t <= s.end);
+
+        if (idx >= 0 && idx !== currentTtsIndex) {
+            // New segment
+            stopCurrentTts();
+            const seg = translatedSegments[idx];
+
+            // Play TTS audio
+            if (seg._audio) {
+                seg._audio.currentTime = 0;
+                seg._audio.play().catch(err => console.warn('TTS play blocked:', err));
+                currentTtsAudio = seg._audio;
+                currentTtsIndex = idx;
+            }
+            // Lower original volume (skip if using accompaniment — already muted)
+            if (!bgAudio) { try { player.setVolume(liveVol); } catch(e) {} }
+
+            // Subtitle overlay
+            if (showZh || showEn) {
+                document.getElementById('subtitleZh').textContent = showZh ? seg.zh : '';
+                document.getElementById('subtitleZh').style.display = showZh ? 'inline-block' : 'none';
+                document.getElementById('subtitleEn').textContent = showEn ? seg.en : '';
+                document.getElementById('subtitleEn').style.display = showEn ? 'block' : 'none';
+                document.getElementById('subtitleOverlay').style.display = 'block';
+            } else {
+                document.getElementById('subtitleOverlay').style.display = 'none';
+            }
+        } else if (idx < 0 && currentTtsIndex >= 0) {
+            // Between segments
+            stopCurrentTts();
+            if (!bgAudio) { try { player.setVolume(100); } catch(e) {} }
+            document.getElementById('subtitleOverlay').style.display = 'none';
+        }
+    }, 250);
+}
+
+function stopSync() {
+    if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+}
+
+function stopCurrentTts() {
+    if (currentTtsAudio) {
+        currentTtsAudio.pause();
+        currentTtsAudio.currentTime = 0;
+        currentTtsAudio = null;
+    }
+    currentTtsIndex = -1;
+}
+
+function preloadAudio(segments) {
+    segments.forEach(seg => {
+        if (seg.audio) {
+            const a = new Audio(seg.audio);
+            a.preload = 'auto';
+            seg._audio = a;
+        }
+    });
+}
+
+// ── Mode Tabs ──
+function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('tabLive').className =
+        mode === 'live' ? 'tab-active flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]'
+                        : 'tab-inactive flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]';
+    document.getElementById('tabFull').className =
+        mode === 'full' ? 'tab-active flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]'
+                        : 'tab-inactive flex-1 py-2.5 border rounded-xl text-sm font-medium transition-all min-h-[44px]';
+    document.getElementById('liveOptions').classList.toggle('hidden', mode !== 'live');
+    document.getElementById('fullOptions').classList.toggle('hidden', mode !== 'full');
+    document.getElementById('startBtnText').textContent =
+        mode === 'live' ? '開始即時語音翻譯' : '開始完整翻譯下載';
+}
+
+document.getElementById('volumeSlider').addEventListener('input', e => {
+    document.getElementById('volumeLabel').textContent = e.target.value + '%';
+});
+document.getElementById('liveVolSlider').addEventListener('input', e => {
+    document.getElementById('liveVolLabel').textContent = e.target.value + '%';
+});
+
+// ── Steps / Progress / Log ──
+function renderSteps(steps) {
+    const c = document.getElementById('stepsContainer');
+    c.innerHTML = '';
+    steps.forEach(s => {
+        const d = document.createElement('div');
+        d.id = 'step-' + s;
+        d.className = 'step-waiting flex-1 text-center py-2 border rounded-lg min-w-[3.5rem] whitespace-nowrap';
+        d.textContent = STEP_LABELS[s] || s;
+        c.appendChild(d);
+    });
+}
+
+function addLog(msg, type = 'info') {
+    const log = document.getElementById('logSection');
+    const el = document.createElement('div');
+    el.className = type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : 'text-gray-400';
+    el.textContent = `[${new Date().toLocaleTimeString('zh-TW',{hour12:false})}] ${msg}`;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+}
+
+function setStep(step, steps) {
+    if (step === currentStep) return;
+    const idx = steps.indexOf(step);
+    steps.forEach((s, i) => {
+        const el = document.getElementById('step-' + s);
+        if (!el) return;
+        if (i < idx) el.className = 'step-done flex-1 text-center py-2 border rounded-lg min-w-[3.5rem] whitespace-nowrap';
+        else if (i === idx) el.className = 'step-active flex-1 text-center py-2 border rounded-lg min-w-[3.5rem] whitespace-nowrap';
+        else el.className = 'step-waiting flex-1 text-center py-2 border rounded-lg min-w-[3.5rem] whitespace-nowrap';
+    });
+    if (STEP_MESSAGES[step] && step !== currentStep) addLog(STEP_MESSAGES[step]);
+    currentStep = step;
+}
+
+function updateProgress(pct, msg) {
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = pct + '%';
+    if (msg) document.getElementById('progressMsg').textContent = msg;
+}
+
+function showPreview(data) {
+    document.getElementById('previewSection').classList.remove('hidden');
+    const t = document.getElementById('previewTable');
+    t.innerHTML = '';
+    data.forEach(item => {
+        const r = document.createElement('div');
+        r.className = 'flex gap-3 py-1.5 border-b border-slate-700/50';
+        r.innerHTML = `<span class="text-gray-500 flex-shrink-0 w-16 text-xs">${escapeHtml(fmt(item.start))}</span>
+            <span class="text-gray-400 flex-1 truncate">${escapeHtml(item.en)}</span>
+            <span class="text-indigo-300 flex-1 truncate">${escapeHtml(item.zh)}</span>`;
+        t.appendChild(r);
+    });
+}
+function fmt(s) { return String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
+}
+
+// ── Start Translation ──
+async function startTranslation() {
+    const url = urlInput.value.trim();
+    if (!url) { urlInput.focus(); return; }
+
+    // Unlock audio on this user gesture (click)
+    unlockAudio();
+
+    let steps;
+    if (currentMode === 'live') {
+        const liveKeepBg = document.getElementById('liveKeepBgToggle').checked;
+        steps = liveKeepBg
+            ? ['download', 'separate', 'transcribe', 'translate', 'tts']
+            : LIVE_STEPS;
+    } else {
+        const keepBg = document.getElementById('keepBgToggle').checked;
+        steps = keepBg
+            ? ['download', 'separate', 'transcribe', 'translate', 'tts', 'compose']
+            : FULL_STEPS;
+    }
+
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin w-5 h-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> <span>處理中...</span>';
+    btn.classList.replace('bg-indigo-600', 'bg-slate-600');
+
+    ['progressSection','resultSection','liveResultSection','errorSection'].forEach(id =>
+        document.getElementById(id).classList.add('hidden'));
+    document.getElementById('progressSection').classList.remove('hidden');
+    document.getElementById('logSection').innerHTML = '';
+    document.getElementById('previewSection').classList.add('hidden');
+    currentStep = null;
+    renderSteps(steps);
+
+    try {
+        let body, endpoint;
+        if (currentMode === 'live') {
+            endpoint = '/api/live-translate';
+            body = { url, voice: document.getElementById('liveVoiceSelect').value,
+                     keep_bg: document.getElementById('liveKeepBgToggle').checked };
+        } else {
+            endpoint = '/api/translate';
+            body = {
+                url,
+                voice: document.getElementById('voiceSelect').value,
+                volume: parseInt(document.getElementById('volumeSlider').value) / 100,
+                subtitle: document.getElementById('subtitleToggle').checked,
+                eng_subtitle: document.getElementById('engSubtitleToggle').checked,
+                keep_bg: document.getElementById('keepBgToggle').checked,
+                quality: document.getElementById('qualitySelect').value,
+            };
+        }
+
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!resp.ok) { showError(`伺服器錯誤 (${resp.status})`); return; }
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        listenProgress(data.job_id, steps);
+    } catch (e) {
+        showError('Failed to start: ' + e.message);
+    }
+}
+
+function listenProgress(jobId, steps) {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/progress/' + jobId);
+
+    eventSource.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); } catch (err) { console.warn('SSE parse error:', err); return; }
+        if (data.status === 'heartbeat') return;
+
+        if (data.status === 'processing') {
+            if (data.step) setStep(data.step, steps);
+            updateProgress(data.progress, STEP_MESSAGES[data.step] || data.message);
+            if (data.title) {
+                const el = document.getElementById('videoTitle');
+                el.textContent = data.title; el.classList.remove('hidden');
+                addLog('影片: ' + data.title, 'success');
+            }
+            if (data.segment_count) addLog(`辨識出 ${data.segment_count} 個語句`, 'success');
+            if (data.preview) showPreview(data.preview);
+            if (data.total_segments) addLog(`翻譯完成: ${data.total_segments} 句`, 'success');
+            if (data.tts_success !== undefined) addLog(`語音合成: ${data.tts_success}/${data.tts_total} 成功`, 'success');
+        }
+
+        if (data.status === 'completed') {
+            eventSource.close();
+            updateProgress(100, '完成！');
+            steps.forEach(s => {
+                const el = document.getElementById('step-' + s);
+                if (el) el.className = 'step-done flex-1 text-center py-2 border rounded-lg min-w-[3.5rem] whitespace-nowrap';
+            });
+            addLog('完成！', 'success');
+
+            if (currentMode === 'live' && data.segments) {
+                translatedSegments = data.segments;
+                preloadAudio(translatedSegments);
+
+                // Load accompaniment track if available
+                if (data.accompaniment) {
+                    bgAudio = new Audio(data.accompaniment);
+                    bgAudio.preload = 'auto';
+                    bgAudio.loop = false;
+                }
+
+                document.getElementById('progressSection').classList.add('hidden');
+                document.getElementById('liveResultSection').classList.remove('hidden');
+                const withAudio = translatedSegments.filter(s => s.audio).length;
+                document.getElementById('liveSegmentCount').textContent =
+                    `共 ${translatedSegments.length} 句翻譯，${withAudio} 段語音已就緒`;
+
+                // Always start sync — timer polls player state internally
+                startSync();
+            } else {
+                document.getElementById('progressSection').classList.add('hidden');
+                document.getElementById('resultSection').classList.remove('hidden');
+                document.getElementById('resultInfo').textContent = `檔案大小: ${data.size_mb} MB`;
+                document.getElementById('downloadBtn').href = '/download/' + encodeURIComponent(data.filename);
+            }
+            resetButton();
+        }
+
+        if (data.status === 'error') {
+            eventSource.close();
+            showError(data.message);
+        }
+    };
+    eventSource.onerror = () => { eventSource.close(); showError('Connection lost'); };
+}
+
+function showError(msg) {
+    document.getElementById('progressSection').classList.add('hidden');
+    document.getElementById('errorSection').classList.remove('hidden');
+    document.getElementById('errorMsg').textContent = msg;
+    resetButton();
+}
+
+function resetButton() {
+    const btn = document.getElementById('startBtn');
+    btn.disabled = false;
+    btn.classList.replace('bg-slate-600', 'bg-indigo-600');
+    const icon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    const text = currentMode === 'live' ? '開始即時語音翻譯' : '開始完整翻譯下載';
+    btn.innerHTML = `${icon} <span>${text}</span>`;
+}
+
+function resetForm() {
+    ['progressSection','resultSection','liveResultSection','errorSection'].forEach(id =>
+        document.getElementById(id).classList.add('hidden'));
+    // Release all Audio objects to prevent memory leaks
+    translatedSegments.forEach(seg => {
+        if (seg._audio) { seg._audio.pause(); seg._audio.src = ''; seg._audio = null; }
+    });
+    translatedSegments = [];
+    stopSync(); stopCurrentTts();
+    if (bgAudio) { bgAudio.pause(); bgAudio = null; }
+    document.getElementById('subtitleOverlay').style.display = 'none';
+    currentStep = null;
+}
+
+window.setMode = setMode;
+window.startTranslation = startTranslation;
+window.resetForm = resetForm;
+})();
+</script>
+</body>
+</html>
