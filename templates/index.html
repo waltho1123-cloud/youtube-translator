@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#0f172a">
     <title>YouTube 英中影片翻譯器</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { background: #0f172a; }
         .glass {
@@ -86,15 +87,26 @@
 <main class="w-full max-w-3xl space-y-6">
     <!-- Header -->
     <div class="text-center space-y-2 relative">
-        <button id="settingsBtn" onclick="toggleSettings()"
-                class="absolute right-0 top-0 p-3 text-gray-400 hover:text-white transition-colors"
-                title="API Key 設定">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-        </button>
+        <!-- Auth & Settings buttons -->
+        <div class="absolute right-0 top-0 flex items-center gap-2">
+            <!-- Google Login button container (logged-out) -->
+            <div id="googleLoginBtn" class="hidden"></div>
+            <!-- User info (logged-in) -->
+            <div id="userInfo" class="flex items-center gap-2 hidden">
+                <img id="userAvatar" src="" class="w-7 h-7 rounded-full" alt="">
+                <span id="userName" class="text-sm text-gray-300"></span>
+                <button onclick="doLogout()" class="text-xs text-gray-500 hover:text-white ml-1">登出</button>
+            </div>
+            <button id="settingsBtn" onclick="toggleSettings()"
+                    class="p-3 text-gray-400 hover:text-white transition-colors"
+                    title="API Key 設定">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </button>
+        </div>
         <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white">YouTube 英中影片翻譯器</h1>
         <p class="text-gray-400">貼上 YouTube 連結，即時語音翻譯或下載完整翻譯影片</p>
     </div>
@@ -358,6 +370,110 @@ function onYouTubeIframeAPIReady() { ytReady = true; }
 
 <script>
 (function() {
+// ── Auth State ──
+let isLoggedIn = false;
+let loggedInUsername = '';
+let loggedInAvatar = '';
+
+function checkAuth() {
+    fetch('/api/auth/me').then(r => r.json()).then(data => {
+        isLoggedIn = data.logged_in;
+        loggedInUsername = data.username || '';
+        loggedInAvatar = data.avatar || '';
+        updateAuthUI();
+    }).catch(() => {});
+}
+
+function updateAuthUI() {
+    var loginBtn = document.getElementById('googleLoginBtn');
+    var userInfoEl = document.getElementById('userInfo');
+    var avatarEl = document.getElementById('userAvatar');
+    var nameEl = document.getElementById('userName');
+    if (isLoggedIn) {
+        loginBtn.classList.add('hidden');
+        loginBtn.style.display = 'none';
+        userInfoEl.classList.remove('hidden');
+        userInfoEl.style.display = 'flex';
+        nameEl.textContent = loggedInUsername;
+        if (loggedInAvatar) {
+            avatarEl.src = loggedInAvatar;
+            avatarEl.classList.remove('hidden');
+        } else {
+            avatarEl.classList.add('hidden');
+        }
+    } else {
+        loginBtn.classList.remove('hidden');
+        loginBtn.style.display = 'block';
+        userInfoEl.classList.add('hidden');
+        userInfoEl.style.display = 'none';
+        // 重新渲染 Google 按鈕（如果容器為空）
+        if (loginBtn.children.length === 0) { initGoogleLogin(); }
+    }
+}
+
+function initGoogleLogin() {
+    fetch('/api/auth/google-client-id').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.client_id) return;
+        google.accounts.id.initialize({
+            client_id: data.client_id,
+            callback: handleGoogleResponse,
+        });
+        google.accounts.id.renderButton(
+            document.getElementById('googleLoginBtn'),
+            { theme: 'outline', size: 'medium', text: 'signin', locale: 'zh-TW' }
+        );
+    });
+}
+
+function googleLogin() {
+    // 備用：如果按鈕沒渲染，嘗試 prompt
+    fetch('/api/auth/google-client-id').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.client_id) { alert('Google Client ID 未設定'); return; }
+        google.accounts.id.initialize({
+            client_id: data.client_id,
+            callback: handleGoogleResponse,
+        });
+        google.accounts.id.prompt();
+    });
+}
+
+// 等 Google GSI 載入後初始化
+function waitForGSI() {
+    if (typeof google !== 'undefined' && google.accounts) {
+        initGoogleLogin();
+    } else {
+        setTimeout(waitForGSI, 200);
+    }
+}
+waitForGSI();
+
+function handleGoogleResponse(response) {
+    fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+    }).then(r => r.json()).then(data => {
+        if (data.ok) {
+            checkAuth();
+        } else {
+            alert(data.error || '登入失敗');
+        }
+    });
+}
+
+async function doLogout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    isLoggedIn = false;
+    loggedInUsername = '';
+    loggedInAvatar = '';
+    updateAuthUI();
+}
+
+// Check auth on page load
+checkAuth();
+
 // ── State ──
 let currentMode = 'live';
 let currentVideoId = null;
@@ -726,9 +842,8 @@ async function startTranslation() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!resp.ok) { showError(`伺服器錯誤 (${resp.status})`); return; }
         const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
+        if (!resp.ok || data.error) { showError(data.error || `伺服器錯誤 (${resp.status})`); return; }
         listenProgress(data.job_id, steps);
     } catch (e) {
         showError('Failed to start: ' + e.message);
@@ -838,6 +953,10 @@ function resetForm() {
 
 // ── Settings Modal ──
 function toggleSettings() {
+    if (!isLoggedIn) {
+        alert('請先點擊右上角的 Google 登入按鈕');
+        return;
+    }
     const modal = document.getElementById('settingsModal');
     modal.classList.toggle('active');
     if (modal.classList.contains('active')) {
@@ -892,7 +1011,10 @@ async function saveKeys() {
             }, 1200);
             return;
         } else {
-            msgEl.textContent = '儲存失敗，請重試';
+            var errData = null;
+            try { errData = await resp.json(); } catch(e) {}
+            var errMsg = (errData && errData.error) ? errData.error : '儲存失敗，請重試';
+            msgEl.textContent = errMsg;
             msgEl.className = 'text-center text-sm text-red-400';
             msgEl.classList.remove('hidden');
             setTimeout(function() { msgEl.classList.add('hidden'); }, 3000);
@@ -968,6 +1090,8 @@ function toggleKeyVisibility(inputId, btn) {
 window.toggleSettings = toggleSettings;
 window.saveKeys = saveKeys;
 window.toggleKeyVisibility = toggleKeyVisibility;
+window.googleLogin = googleLogin;
+window.doLogout = doLogout;
 })();
 </script>
 </body>

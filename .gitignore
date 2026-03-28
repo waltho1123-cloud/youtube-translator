@@ -14,6 +14,9 @@ temp/
 output/
 *.log
 
+# SQLite database
+users.db
+
 # OS files
 .DS_Store
 Thumbs.db

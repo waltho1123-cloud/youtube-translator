@@ -14,11 +14,16 @@ import logging
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 from werkzeug.utils import secure_filename
+
+import db
 
 load_dotenv()
 
-API_TOKEN = os.getenv("API_TOKEN", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 logging.basicConfig(
     filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline.log"),
@@ -29,6 +34,30 @@ logging.basicConfig(
 log = logging.getLogger("pipeline")
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+
+class User(UserMixin):
+    def __init__(self, user_data):
+        self.id = user_data['id']
+        self.email = user_data['email']
+        self.name = user_data.get('name', '')
+        self.username = user_data.get('name', user_data['email'])  # backward compat
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = db.get_user_by_id(int(user_id))
+    if user_data:
+        return User(user_data)
+    return None
+
+
+# 初始化資料庫
+db.init_db()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -71,32 +100,79 @@ def health():
     return jsonify({"status": "ok", "active_jobs": len(jobs)})
 
 
+@app.route("/api/auth/google", methods=["POST"])
+def google_login():
+    data = request.json
+    credential = data.get("credential", "")
+    if not credential:
+        return jsonify({"error": "Missing credential"}), 400
+
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            credential, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+        google_sub = idinfo['sub']
+        email = idinfo.get('email', '')
+        name = idinfo.get('name', '')
+        avatar = idinfo.get('picture', '')
+
+        user_data = db.find_or_create_google_user(google_sub, email, name, avatar)
+        login_user(User(user_data))
+        return jsonify({"ok": True, "username": name or email, "avatar": avatar})
+    except Exception as e:
+        return jsonify({"error": f"Google 驗證失敗: {str(e)[:100]}"}), 401
+
+
+@app.route("/api/auth/google-client-id")
+def google_client_id():
+    return jsonify({"client_id": GOOGLE_CLIENT_ID})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    logout_user()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/me")
+def auth_me():
+    if current_user.is_authenticated:
+        user_data = db.get_user_by_id(current_user.id)
+        return jsonify({
+            "logged_in": True,
+            "username": current_user.name or current_user.email,
+            "avatar": user_data.get('avatar', '') if user_data else ''
+        })
+    return jsonify({"logged_in": False})
+
+
 @app.route("/api/keys", methods=["GET"])
 def get_keys():
     """Return whether API keys are configured (not the actual keys)."""
+    if not current_user.is_authenticated:
+        return jsonify({"openai": False, "minimax": False})
+    keys = db.get_user_keys(current_user.id)
     return jsonify({
-        "openai": bool(os.getenv("OPENAI_API_KEY")),
-        "minimax": bool(os.getenv("MINIMAX_API_KEY")),
+        "openai": bool(keys.get("openai_key")),
+        "minimax": bool(keys.get("minimax_key")),
     })
 
 
 @app.route("/api/keys", methods=["POST"])
 def set_keys():
-    """Allow users to set API keys at runtime."""
-    if API_TOKEN:
-        auth = request.headers.get("Authorization", "")
-        if auth != f"Bearer {API_TOKEN}":
-            return jsonify({"error": "Unauthorized"}), 401
+    """Save API keys to the database for the current user."""
+    if not current_user.is_authenticated:
+        return jsonify({"error": "請先登入"}), 401
     data = request.json
     openai_key = data.get("openai_key", "").strip()
     minimax_key = data.get("minimax_key", "").strip()
     minimax_group = data.get("minimax_group", "").strip()
-    if openai_key:
-        os.environ["OPENAI_API_KEY"] = openai_key
-    if minimax_key:
-        os.environ["MINIMAX_API_KEY"] = minimax_key
-    if minimax_group:
-        os.environ["MINIMAX_GROUP_ID"] = minimax_group
+    db.update_user_keys(
+        current_user.id,
+        openai_key=openai_key if openai_key else None,
+        minimax_key=minimax_key if minimax_key else None,
+        minimax_group=minimax_group if minimax_group else None,
+    )
     return jsonify({"ok": True})
 
 
@@ -107,6 +183,15 @@ def index():
 
 @app.route("/api/translate", methods=["POST"])
 def start_translate():
+    if not current_user.is_authenticated:
+        return jsonify({"error": "請先登入"}), 401
+    keys = db.get_user_keys(current_user.id)
+    openai_key = keys.get("openai_key", "")
+    minimax_key = keys.get("minimax_key", "")
+    minimax_group = keys.get("minimax_group", "")
+    if not openai_key or not minimax_key:
+        return jsonify({"error": "請先在設定中填寫 API Key"}), 400
+
     data = request.json
     url = data.get("url", "").strip()
     if not url:
@@ -139,7 +224,8 @@ def start_translate():
 
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(job_id, url, voice, volume, model, subtitle, quality, eng_subtitle, keep_bg),
+        args=(job_id, url, voice, volume, model, subtitle, quality, eng_subtitle, keep_bg,
+              openai_key, minimax_key, minimax_group),
         daemon=True,
     )
     thread.start()
@@ -150,6 +236,15 @@ def start_translate():
 @app.route("/api/live-translate", methods=["POST"])
 def start_live_translate():
     """Live voice translation: download audio, transcribe, translate, TTS."""
+    if not current_user.is_authenticated:
+        return jsonify({"error": "請先登入"}), 401
+    keys = db.get_user_keys(current_user.id)
+    openai_key = keys.get("openai_key", "")
+    minimax_key = keys.get("minimax_key", "")
+    minimax_group = keys.get("minimax_group", "")
+    if not openai_key or not minimax_key:
+        return jsonify({"error": "請先在設定中填寫 API Key"}), 400
+
     data = request.json
     url = data.get("url", "").strip()
     if not url:
@@ -173,7 +268,8 @@ def start_live_translate():
 
     thread = threading.Thread(
         target=_run_live_pipeline,
-        args=(job_id, url, model, voice, keep_bg),
+        args=(job_id, url, model, voice, keep_bg,
+              openai_key, minimax_key, minimax_group),
         daemon=True,
     )
     thread.start()
@@ -252,7 +348,8 @@ def _emit(job_id, status, message, progress=0, **kwargs):
             jobs[job_id]["completed_at"] = time.time()
 
 
-def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="720", eng_subtitle=False, keep_bg=False):
+def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="720", eng_subtitle=False, keep_bg=False,
+                   openai_key="", minimax_key="", minimax_group=""):
     """Run the full translation pipeline in a background thread."""
     job_temp = os.path.join(TEMP_DIR, job_id)
     try:
@@ -263,10 +360,6 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         from tts_engine import generate_tts_batch
         from composer import compose_video
         from separator import separate_vocals
-
-        openai_key = os.getenv("OPENAI_API_KEY")
-        minimax_key = os.getenv("MINIMAX_API_KEY")
-        minimax_group = os.getenv("MINIMAX_GROUP_ID", "")
 
         if not openai_key or not minimax_key:
             _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
@@ -374,8 +467,9 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         shutil.rmtree(job_temp, ignore_errors=True)
 
 
-def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
-    """Run live voice translation pipeline: audio → transcribe → translate → TTS."""
+def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
+                       openai_key="", minimax_key="", minimax_group=""):
+    """Run live voice translation pipeline: audio -> transcribe -> translate -> TTS."""
     job_temp = os.path.join(TEMP_DIR, job_id)
     try:
         from openai import OpenAI
@@ -384,10 +478,6 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
         from translator import translate_segments
         from tts_engine import generate_tts_batch
         from separator import separate_vocals
-
-        openai_key = os.getenv("OPENAI_API_KEY")
-        minimax_key = os.getenv("MINIMAX_API_KEY")
-        minimax_group = os.getenv("MINIMAX_GROUP_ID", "")
 
         if not openai_key or not minimax_key:
             _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
