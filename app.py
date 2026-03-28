@@ -383,10 +383,15 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         # Step 1.5: Separate vocals if keep_bg enabled
         accompaniment_path = None
         if keep_bg:
-            _emit(job_id, "processing", "separating", 18, step="separate")
-            separated = separate_vocals(video_info["audio_path"], job_temp)
-            accompaniment_path = separated["accompaniment"]
-            _emit(job_id, "processing", "separated", 22, step="separate")
+            from separator import is_available as demucs_available
+            if not demucs_available():
+                _emit(job_id, "processing", "skip_separate", 22, step="separate")
+                log.warning("[Pipeline] Demucs not installed, skipping background music separation")
+            else:
+                _emit(job_id, "processing", "separating", 18, step="separate")
+                separated = separate_vocals(video_info["audio_path"], job_temp)
+                accompaniment_path = separated["accompaniment"]
+                _emit(job_id, "processing", "separated", 22, step="separate")
 
         # Step 2: Transcribe
         _emit(job_id, "processing", "transcribing", 22, step="transcribe")
@@ -501,16 +506,21 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
         # Step 1.5: Separate vocals if keep_bg enabled
         accompaniment_url = None
         if keep_bg:
-            _emit(job_id, "processing", "separating", 15, step="separate")
-            separated = separate_vocals(audio_info["audio_path"], job_temp)
-            # Copy accompaniment to serveable TTS dir
-            tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
-            os.makedirs(tts_dir, exist_ok=True)
-            import shutil as _shutil
-            bg_dest = os.path.join(tts_dir, "accompaniment.wav")
-            _shutil.copy2(separated["accompaniment"], bg_dest)
-            accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
-            _emit(job_id, "processing", "separated", 18, step="separate")
+            from separator import is_available as demucs_available
+            if not demucs_available():
+                _emit(job_id, "processing", "skip_separate", 18, step="separate")
+                log.warning("[Live Pipeline] Demucs not installed, skipping background music separation")
+            else:
+                _emit(job_id, "processing", "separating", 15, step="separate")
+                separated = separate_vocals(audio_info["audio_path"], job_temp)
+                # Copy accompaniment to serveable TTS dir
+                tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
+                os.makedirs(tts_dir, exist_ok=True)
+                import shutil as _shutil
+                bg_dest = os.path.join(tts_dir, "accompaniment.wav")
+                _shutil.copy2(separated["accompaniment"], bg_dest)
+                accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
+                _emit(job_id, "processing", "separated", 18, step="separate")
 
         # Step 2: Transcribe
         _emit(job_id, "processing", "transcribing", 18, step="transcribe")

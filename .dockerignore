@@ -1,0 +1,12 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+temp/
+output/
+*.log
+.env
+.git/
+.DS_Store
+users.db
+yt-dlp

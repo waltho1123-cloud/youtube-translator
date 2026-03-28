@@ -8,14 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install CPU-only PyTorch first (much smaller than default GPU version)
-RUN pip install --no-cache-dir \
-    torch torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
-
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Optional: install demucs (background music separation)
+# Uncomment the next line if you have enough memory (requires ~1GB+ RAM)
+# RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir demucs>=4.0.0
 
 # Copy app files
 COPY . .

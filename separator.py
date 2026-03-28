@@ -6,6 +6,15 @@ import logging
 log = logging.getLogger("pipeline")
 
 
+def is_available() -> bool:
+    """Check if demucs is installed."""
+    try:
+        import demucs  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def separate_vocals(audio_path: str, output_dir: str) -> dict:
     """Separate audio into vocals and accompaniment using Demucs.
 
