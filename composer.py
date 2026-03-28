@@ -1,7 +1,10 @@
 """Video composition - merge Chinese TTS audio with original video."""
+import logging
 import os
 import subprocess
 from pydub import AudioSegment
+
+log = logging.getLogger("pipeline")
 
 
 def _get_duration_ms(video_path: str) -> int:
@@ -77,7 +80,6 @@ def compose_video(
     chinese_track = AudioSegment.silent(duration=duration_ms, frame_rate=16000)
 
     placed = 0
-    import logging; log = logging.getLogger("pipeline")
     log.info(f"[Compose] Total segments: {len(segments)}, track duration: {duration_ms}ms")
     for seg in segments:
         tts_path = seg.get("tts_path")
@@ -103,13 +105,14 @@ def compose_video(
 
     log.info(f"[Compose] Placed {placed} segments onto Chinese track")
     # Export Chinese track as WAV
-    temp_audio = output_path.replace(".mp4", "_cn_track.wav")
+    base, _ = os.path.splitext(output_path)
+    temp_audio = base + "_cn_track.wav"
     chinese_track.export(temp_audio, format="wav")
 
     # Generate SRT if subtitles requested
     burn_any = subtitle or eng_subtitle
-    zh_srt_path = output_path.replace(".mp4", "_zh.srt")
-    en_srt_path = output_path.replace(".mp4", "_en.srt")
+    zh_srt_path = base + "_zh.srt"
+    en_srt_path = base + "_en.srt"
     if subtitle:
         _generate_srt(segments, zh_srt_path, field="translated")
     if eng_subtitle:
@@ -127,19 +130,19 @@ def compose_video(
     sub_filters = []
     if burn_any:
         if subtitle:
+            margin_v_zh = 50 if eng_subtitle else 25
             escaped_zh = zh_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_zh}':force_style="
-                "'FontSize=24,FontName=PingFang SC,PrimaryColour=&H00FFFFFF,"
-                "OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV=25'"
+                f"'FontSize=24,FontName=PingFang SC,PrimaryColour=&H00FFFFFF,"
+                f"OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV={margin_v_zh}'"
             )
         if eng_subtitle:
-            margin_v = 60 if subtitle else 25
             escaped_en = en_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_en}':force_style="
                 f"'FontSize=20,FontName=Arial,PrimaryColour=&H00CCCCCC,"
-                f"OutlineColour=&H00000000,Outline=1,Shadow=1,MarginV={margin_v}'"
+                f"OutlineColour=&H00000000,Outline=1,Shadow=1,MarginV=25'"
             )
 
     # Audio filter

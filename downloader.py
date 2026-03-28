@@ -20,7 +20,13 @@ def download_audio_only(url: str, output_dir: str) -> dict:
         if os.path.exists(p):
             os.remove(p)
 
-    yt = YouTube(url)
+    try:
+        yt = YouTube(url)
+    except Exception as e:
+        raise RuntimeError(f"無法載入影片，請確認連結是否正確: {str(e)[:100]}")
+
+    if yt.length and yt.length > 1800:
+        raise ValueError("影片過長（超過 30 分鐘），請選擇較短的影片")
 
     stream = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
     if stream is None:
@@ -68,7 +74,13 @@ def download_video(url: str, output_dir: str, quality: str = "720") -> dict:
             os.remove(p)
 
     # Download video using pytubefix
-    yt = YouTube(url)
+    try:
+        yt = YouTube(url)
+    except Exception as e:
+        raise RuntimeError(f"無法載入影片，請確認連結是否正確: {str(e)[:100]}")
+
+    if yt.length and yt.length > 1800:
+        raise ValueError("影片過長（超過 30 分鐘），請選擇較短的影片")
 
     target_res = f"{quality}p"
 

@@ -81,7 +81,7 @@ def translate_segments(
             except Exception as e:
                 log.warning(f"[Translate] batch attempt {attempt + 1}/{max_retries} failed: {e}")
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt  # 指數退避：1s, 2s, 4s
+                    wait = 2 ** attempt  # 指數退避：1s, 2s
                     time.sleep(wait)
 
         if response is not None:

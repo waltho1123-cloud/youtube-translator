@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f172a">
     <title>YouTube 英中影片翻譯器</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background: #0f172a; }
         .glass {
@@ -40,7 +40,7 @@
             background: #334155; outline: none;
         }
         .ck { -webkit-appearance: checkbox !important; appearance: checkbox !important;
-              width: 18px !important; height: 18px !important; opacity: 1 !important;
+              width: 22px !important; height: 22px !important; opacity: 1 !important;
               position: static !important; accent-color: #6366f1; cursor: pointer; }
         .tab-active { background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; }
         .tab-inactive { border-color: #334155; color: #64748b; }
@@ -55,7 +55,7 @@
             .fade-in { animation: none; }
         }
         .subtitle-overlay {
-            position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
             z-index: 10; text-align: center; pointer-events: none; max-width: 94%;
         }
         .subtitle-zh {
@@ -68,22 +68,91 @@
             font-size: clamp(0.65rem, 2vw, 0.95rem); color: #d1d5db;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8); margin-top: 2px;
         }
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 50; align-items: center; justify-content: center;
+        }
+        .modal-backdrop.active { display: flex; }
+        .modal-backdrop:not(.active) { display: none; }
+        .modal-box {
+            background: #1e293b; border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 1rem; padding: 1.5rem; width: 90%; max-width: 28rem;
+            max-height: 90vh; overflow-y: auto;
+        }
     </style>
 </head>
 <body class="min-h-screen text-gray-200 flex items-start justify-center p-3 pt-6 sm:p-4 sm:pt-12">
 
 <main class="w-full max-w-3xl space-y-6">
     <!-- Header -->
-    <div class="text-center space-y-2">
+    <div class="text-center space-y-2 relative">
+        <button id="settingsBtn" onclick="toggleSettings()"
+                class="absolute right-0 top-0 p-3 text-gray-400 hover:text-white transition-colors"
+                title="API Key 設定">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+        </button>
         <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white">YouTube 英中影片翻譯器</h1>
         <p class="text-gray-400">貼上 YouTube 連結，即時語音翻譯或下載完整翻譯影片</p>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-backdrop">
+        <div class="modal-box space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-bold text-white">API Key 設定</h2>
+                <button onclick="toggleSettings()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">OpenAI API Key</label>
+                <div class="flex items-center gap-2">
+                    <input id="openaiKeyInput" type="password" placeholder="sk-..."
+                           class="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
+                                  placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    <button type="button" onclick="toggleKeyVisibility('openaiKeyInput', this)"
+                            class="p-2 text-gray-400 hover:text-white flex-shrink-0">
+                        <svg class="w-5 h-5 eye-off" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"/></svg>
+                        <svg class="w-5 h-5 eye-on hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </div>
+                <p id="openaiKeyStatus" class="text-xs mt-1 text-gray-500"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">MiniMax API Key</label>
+                <div class="flex items-center gap-2">
+                    <input id="minimaxKeyInput" type="password" placeholder="eyJ..."
+                           class="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
+                                  placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    <button type="button" onclick="toggleKeyVisibility('minimaxKeyInput', this)"
+                            class="p-2 text-gray-400 hover:text-white flex-shrink-0">
+                        <svg class="w-5 h-5 eye-off" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"/></svg>
+                        <svg class="w-5 h-5 eye-on hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </div>
+                <p id="minimaxKeyStatus" class="text-xs mt-1 text-gray-500"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">MiniMax Group ID <span class="text-gray-500">(選填)</span></label>
+                <input id="minimaxGroupInput" type="text" placeholder="Group ID"
+                       class="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
+                              placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+            </div>
+            <button id="saveKeysBtn" onclick="saveKeys()"
+                    class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors">
+                儲存設定
+            </button>
+            <p id="keySaveMsg" class="text-center text-sm hidden"></p>
+        </div>
     </div>
 
     <!-- URL Input -->
     <div class="glass rounded-2xl p-4 sm:p-6">
         <label class="block text-sm font-medium text-gray-300 mb-2">YouTube 影片網址</label>
         <input id="urlInput" type="url" placeholder="https://www.youtube.com/watch?v=..."
-               class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+               class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-white
                       placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
     </div>
 
@@ -99,7 +168,7 @@
     </div>
 
     <!-- Controls -->
-    <div id="controlSection" class="glass rounded-2xl p-6 space-y-5 hidden fade-in">
+    <div id="controlSection" class="glass rounded-2xl p-4 sm:p-6 space-y-5 hidden fade-in">
         <!-- Tabs -->
         <div class="flex gap-3">
             <button id="tabLive" onclick="setMode('live')"
@@ -118,14 +187,15 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-2">配音語音</label>
                     <select id="liveVoiceSelect"
-                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-white
                                    focus:outline-none focus:border-indigo-500">
-                        <option value="rachel">Rachel (女聲 - 沉穩)</option>
-                        <option value="bella">Bella (女聲 - 柔和)</option>
-                        <option value="josh">Josh (男聲 - 低沉)</option>
-                        <option value="antoni">Antoni (男聲 - 友善)</option>
-                        <option value="adam">Adam (男聲 - 深沉)</option>
-                        <option value="sam">Sam (男聲 - 沙啞)</option>
+                        <option value="female_sichuan">甜美女聲</option>
+                        <option value="female_gentle">少女女聲</option>
+                        <option value="female_news">御姐女聲</option>
+                        <option value="male_news">青年男聲</option>
+                        <option value="male_deep">大學生男聲</option>
+                        <option value="presenter_male">主持人男聲</option>
+                        <option value="presenter_female">主持人女聲</option>
                     </select>
                 </div>
                 <div>
@@ -154,24 +224,25 @@
 
         <!-- Full mode options -->
         <div id="fullOptions" class="hidden space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-2">配音語音</label>
                     <select id="voiceSelect"
-                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-white
                                    focus:outline-none focus:border-indigo-500">
-                        <option value="rachel">Rachel (女聲 - 沉穩)</option>
-                        <option value="bella">Bella (女聲 - 柔和)</option>
-                        <option value="josh">Josh (男聲 - 低沉)</option>
-                        <option value="antoni">Antoni (男聲 - 友善)</option>
-                        <option value="adam">Adam (男聲 - 深沉)</option>
-                        <option value="sam">Sam (男聲 - 沙啞)</option>
+                        <option value="female_sichuan">甜美女聲</option>
+                        <option value="female_gentle">少女女聲</option>
+                        <option value="female_news">御姐女聲</option>
+                        <option value="male_news">青年男聲</option>
+                        <option value="male_deep">大學生男聲</option>
+                        <option value="presenter_male">主持人男聲</option>
+                        <option value="presenter_female">主持人女聲</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-2">影片畫質</label>
                     <select id="qualitySelect"
-                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-gray-900
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-xl text-white
                                    focus:outline-none focus:border-indigo-500">
                         <option value="1080">1080p HD</option>
                         <option value="720" selected>720p</option>
@@ -217,7 +288,7 @@
     </div>
 
     <!-- Progress -->
-    <div id="progressSection" class="glass rounded-2xl p-6 space-y-5 hidden fade-in">
+    <div id="progressSection" class="glass rounded-2xl p-4 sm:p-6 space-y-5 hidden fade-in">
         <div id="videoTitle" class="text-white font-medium hidden"></div>
         <div>
             <div class="flex justify-between text-sm mb-2">
@@ -229,7 +300,7 @@
                      style="width: 0%"></div>
             </div>
         </div>
-        <div id="stepsContainer" class="flex justify-between gap-2 text-xs overflow-x-auto"></div>
+        <div id="stepsContainer" class="flex gap-2 text-xs overflow-x-auto pb-2 -mb-2"></div>
         <div id="previewSection" class="hidden fade-in">
             <h3 class="text-sm font-medium text-gray-300 mb-2">翻譯預覽</h3>
             <div id="previewTable" class="space-y-1 max-h-48 overflow-y-auto text-sm"></div>
@@ -238,7 +309,7 @@
     </div>
 
     <!-- Live Result -->
-    <div id="liveResultSection" class="glass rounded-2xl p-6 hidden fade-in">
+    <div id="liveResultSection" class="glass rounded-2xl p-4 sm:p-6 hidden fade-in">
         <div class="text-center space-y-3">
             <div class="text-4xl text-green-400">&#10003;</div>
             <h2 class="text-lg font-bold text-green-400">語音翻譯就緒！</h2>
@@ -250,7 +321,7 @@
     </div>
 
     <!-- Full Result -->
-    <div id="resultSection" class="glass rounded-2xl p-6 hidden fade-in">
+    <div id="resultSection" class="glass rounded-2xl p-4 sm:p-6 hidden fade-in">
         <div class="text-center space-y-4">
             <div class="text-5xl">&#10003;</div>
             <h2 class="text-xl font-bold text-green-400">翻譯完成！</h2>
@@ -265,13 +336,13 @@
     </div>
 
     <!-- Error -->
-    <div id="errorSection" class="glass rounded-2xl p-6 hidden fade-in border border-red-500/30">
+    <div id="errorSection" class="glass rounded-2xl p-4 sm:p-6 hidden fade-in border border-red-500/30">
         <div class="text-center space-y-3">
             <div class="text-4xl">&#9888;</div>
             <h2 class="text-lg font-bold text-red-400">處理失敗</h2>
             <p id="errorMsg" class="text-gray-400 text-sm"></p>
             <button onclick="resetForm()"
-                    class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm">重試</button>
+                    class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm">重試</button>
         </div>
     </div>
 </main>
@@ -317,6 +388,10 @@ function unlockAudio() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
+    if (audioCtx.state === 'running') {
+        document.removeEventListener('click', unlockAudio);
+        return;
+    }
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
@@ -327,7 +402,8 @@ function unlockAudio() {
     src.connect(audioCtx.destination);
     src.start();
 }
-document.addEventListener('click', unlockAudio, { once: true });
+// 每次點擊都嘗試解鎖音訊（不限一次），確保長時間等待後仍可播放
+document.addEventListener('click', unlockAudio);
 window.addEventListener('beforeunload', () => {
     if (eventSource) { eventSource.close(); eventSource = null; }
     stopSync(); stopCurrentTts();
@@ -393,9 +469,28 @@ function embedVideo(videoId) {
     }
 }
 
+function findSegmentIndex(segments, time) {
+    let lo = 0, hi = segments.length - 1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        if (time < segments[mid].start) hi = mid - 1;
+        else if (time > segments[mid].end) lo = mid + 1;
+        else return mid;
+    }
+    return -1;
+}
+
 // ── TTS + Subtitle Sync (polling-based, no event dependency) ──
 function startSync() {
     stopSync();
+
+    // Cache DOM references outside the interval callback
+    const cachedLiveVolSlider = document.getElementById('liveVolSlider');
+    const cachedLiveSubtitleToggle = document.getElementById('liveSubtitleToggle');
+    const cachedLiveEnSubtitleToggle = document.getElementById('liveEnSubtitleToggle');
+    const cachedSubtitleOverlay = document.getElementById('subtitleOverlay');
+    const cachedSubtitleZh = document.getElementById('subtitleZh');
+    const cachedSubtitleEn = document.getElementById('subtitleEn');
 
     syncTimer = setInterval(() => {
         if (!player || typeof player.getCurrentTime !== 'function') return;
@@ -405,9 +500,9 @@ function startSync() {
         let state;
         try { state = player.getPlayerState(); } catch(e) { return; }
 
-        const liveVol = parseInt(document.getElementById('liveVolSlider').value);
-        const showZh = document.getElementById('liveSubtitleToggle').checked;
-        const showEn = document.getElementById('liveEnSubtitleToggle').checked;
+        const liveVol = parseInt(cachedLiveVolSlider.value);
+        const showZh = cachedLiveSubtitleToggle.checked;
+        const showEn = cachedLiveEnSubtitleToggle.checked;
 
         if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
             if (currentTtsAudio) currentTtsAudio.pause();
@@ -428,7 +523,7 @@ function startSync() {
         }
 
         const t = player.getCurrentTime();
-        const idx = translatedSegments.findIndex(s => t >= s.start && t <= s.end);
+        const idx = findSegmentIndex(translatedSegments, t);
 
         if (idx >= 0 && idx !== currentTtsIndex) {
             // New segment
@@ -447,19 +542,19 @@ function startSync() {
 
             // Subtitle overlay
             if (showZh || showEn) {
-                document.getElementById('subtitleZh').textContent = showZh ? seg.zh : '';
-                document.getElementById('subtitleZh').style.display = showZh ? 'inline-block' : 'none';
-                document.getElementById('subtitleEn').textContent = showEn ? seg.en : '';
-                document.getElementById('subtitleEn').style.display = showEn ? 'block' : 'none';
-                document.getElementById('subtitleOverlay').style.display = 'block';
+                cachedSubtitleZh.textContent = showZh ? seg.zh : '';
+                cachedSubtitleZh.style.display = showZh ? 'inline-block' : 'none';
+                cachedSubtitleEn.textContent = showEn ? seg.en : '';
+                cachedSubtitleEn.style.display = showEn ? 'block' : 'none';
+                cachedSubtitleOverlay.style.display = 'block';
             } else {
-                document.getElementById('subtitleOverlay').style.display = 'none';
+                cachedSubtitleOverlay.style.display = 'none';
             }
         } else if (idx < 0 && currentTtsIndex >= 0) {
             // Between segments
             stopCurrentTts();
             if (!bgAudio) { try { player.setVolume(100); } catch(e) {} }
-            document.getElementById('subtitleOverlay').style.display = 'none';
+            cachedSubtitleOverlay.style.display = 'none';
         }
     }, 250);
 }
@@ -481,7 +576,7 @@ function preloadAudio(segments) {
     segments.forEach(seg => {
         if (seg.audio) {
             const a = new Audio(seg.audio);
-            a.preload = 'auto';
+            a.preload = 'metadata';
             seg._audio = a;
         }
     });
@@ -557,10 +652,12 @@ function showPreview(data) {
     t.innerHTML = '';
     data.forEach(item => {
         const r = document.createElement('div');
-        r.className = 'flex gap-3 py-1.5 border-b border-slate-700/50';
-        r.innerHTML = `<span class="text-gray-500 flex-shrink-0 w-16 text-xs">${escapeHtml(fmt(item.start))}</span>
-            <span class="text-gray-400 flex-1 truncate">${escapeHtml(item.en)}</span>
-            <span class="text-indigo-300 flex-1 truncate">${escapeHtml(item.zh)}</span>`;
+        r.className = 'py-1.5 border-b border-slate-700/50';
+        r.innerHTML = `<div class="flex gap-2 items-baseline">
+    <span class="text-gray-500 flex-shrink-0 text-xs">${escapeHtml(fmt(item.start))}</span>
+    <span class="text-gray-400 text-sm truncate">${escapeHtml(item.en)}</span>
+</div>
+<div class="text-indigo-300 text-sm truncate pl-10">${escapeHtml(item.zh)}</div>`;
         t.appendChild(r);
     });
 }
@@ -663,6 +760,7 @@ function listenProgress(jobId, steps) {
 
         if (data.status === 'completed') {
             eventSource.close();
+            eventSource = null;
             updateProgress(100, '完成！');
             steps.forEach(s => {
                 const el = document.getElementById('step-' + s);
@@ -687,7 +785,8 @@ function listenProgress(jobId, steps) {
                 document.getElementById('liveSegmentCount').textContent =
                     `共 ${translatedSegments.length} 句翻譯，${withAudio} 段語音已就緒`;
 
-                // Always start sync — timer polls player state internally
+                // 自動解鎖音訊並開始同步
+                enableLiveAudio();
                 startSync();
             } else {
                 document.getElementById('progressSection').classList.add('hidden');
@@ -700,10 +799,11 @@ function listenProgress(jobId, steps) {
 
         if (data.status === 'error') {
             eventSource.close();
+            eventSource = null;
             showError(data.message);
         }
     };
-    eventSource.onerror = () => { eventSource.close(); showError('Connection lost'); };
+    eventSource.onerror = () => { eventSource.close(); eventSource = null; showError('Connection lost'); };
 }
 
 function showError(msg) {
@@ -736,9 +836,138 @@ function resetForm() {
     currentStep = null;
 }
 
+// ── Settings Modal ──
+function toggleSettings() {
+    const modal = document.getElementById('settingsModal');
+    modal.classList.toggle('active');
+    if (modal.classList.contains('active')) {
+        loadKeyStatus();
+    }
+}
+
+async function loadKeyStatus() {
+    try {
+        const resp = await fetch('/api/keys');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        document.getElementById('openaiKeyStatus').textContent =
+            data.openai ? '已設定' : '未設定';
+        document.getElementById('openaiKeyStatus').className =
+            'text-xs mt-1 ' + (data.openai ? 'text-green-400' : 'text-red-400');
+        document.getElementById('minimaxKeyStatus').textContent =
+            data.minimax ? '已設定' : '未設定';
+        document.getElementById('minimaxKeyStatus').className =
+            'text-xs mt-1 ' + (data.minimax ? 'text-green-400' : 'text-red-400');
+    } catch (e) {}
+}
+
+async function saveKeys() {
+    const openaiKey = document.getElementById('openaiKeyInput').value.trim();
+    const minimaxKey = document.getElementById('minimaxKeyInput').value.trim();
+    const minimaxGroup = document.getElementById('minimaxGroupInput').value.trim();
+    const modal = document.getElementById('settingsModal');
+
+    if (!openaiKey && !minimaxKey && !minimaxGroup) {
+        modal.classList.remove('active');
+        return;
+    }
+
+    const msgEl = document.getElementById('keySaveMsg');
+    try {
+        const resp = await fetch('/api/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ openai_key: openaiKey, minimax_key: minimaxKey, minimax_group: minimaxGroup }),
+        });
+        if (resp.ok) {
+            document.getElementById('openaiKeyInput').value = '';
+            document.getElementById('minimaxKeyInput').value = '';
+            document.getElementById('minimaxGroupInput').value = '';
+            msgEl.textContent = '設定已儲存';
+            msgEl.className = 'text-center text-sm text-green-400';
+            msgEl.classList.remove('hidden');
+            setTimeout(function() {
+                msgEl.classList.add('hidden');
+                modal.classList.remove('active');
+            }, 1200);
+            return;
+        } else {
+            msgEl.textContent = '儲存失敗，請重試';
+            msgEl.className = 'text-center text-sm text-red-400';
+            msgEl.classList.remove('hidden');
+            setTimeout(function() { msgEl.classList.add('hidden'); }, 3000);
+            return;
+        }
+    } catch (e) {
+        msgEl.textContent = '網路錯誤，請重試';
+        msgEl.className = 'text-center text-sm text-red-400';
+        msgEl.classList.remove('hidden');
+        setTimeout(function() { msgEl.classList.add('hidden'); }, 3000);
+        return;
+    }
+}
+
+// 點擊 modal 背景關閉
+document.getElementById('settingsModal').addEventListener('click', function(e) {
+    if (e.target === this) toggleSettings();
+});
+
+// Escape 鍵關閉 modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var modal = document.getElementById('settingsModal');
+        if (modal.classList.contains('active')) {
+            modal.classList.remove('active');
+        }
+    }
+});
+
+function enableLiveAudio() {
+    // 使用者點擊解鎖音訊
+    unlockAudio();
+
+    // 預播放前 5 個有音訊的片段以解鎖（靜音播放一瞬間），避免同時解鎖過多
+    var unlockCount = 0;
+    for (var i = 0; i < translatedSegments.length && unlockCount < 5; i++) {
+        var seg = translatedSegments[i];
+        if (seg._audio) {
+            (function(audio) {
+                audio.volume = 0;
+                audio.play().then(function() {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = 1;
+                }).catch(function() {});
+            })(seg._audio);
+            unlockCount++;
+        }
+    }
+    if (bgAudio) {
+        bgAudio.volume = 0;
+        bgAudio.play().then(function() {
+            bgAudio.pause();
+            bgAudio.currentTime = 0;
+            bgAudio.volume = 1;
+        }).catch(function() {});
+    }
+
+}
+
 window.setMode = setMode;
 window.startTranslation = startTranslation;
 window.resetForm = resetForm;
+window.enableLiveAudio = enableLiveAudio;
+function toggleKeyVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    btn.querySelector('.eye-off').classList.toggle('hidden', isPassword);
+    btn.querySelector('.eye-on').classList.toggle('hidden', !isPassword);
+}
+
+window.toggleSettings = toggleSettings;
+window.saveKeys = saveKeys;
+window.toggleKeyVisibility = toggleKeyVisibility;
 })();
 </script>
 </body>

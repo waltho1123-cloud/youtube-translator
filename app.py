@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import shutil
+import sys
 import threading
 import time
 import uuid
@@ -17,6 +18,8 @@ from werkzeug.utils import secure_filename
 
 load_dotenv()
 
+API_TOKEN = os.getenv("API_TOKEN", "")
+
 logging.basicConfig(
     filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline.log"),
     level=logging.INFO,
@@ -28,12 +31,15 @@ log = logging.getLogger("pipeline")
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # In-memory job store
 jobs = {}
+jobs_lock = threading.Lock()
 
 # 允許使用的模型白名單
 ALLOWED_MODELS = {"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"}
@@ -42,12 +48,13 @@ ALLOWED_MODELS = {"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"}
 def _cleanup_old_jobs(max_age=3600):
     """清理超過 max_age 秒的已完成任務，防止 jobs 字典無限成長。"""
     now = time.time()
-    expired = [
-        jid for jid, jdata in jobs.items()
-        if jdata.get("completed_at") and now - jdata["completed_at"] > max_age
-    ]
-    for jid in expired:
-        del jobs[jid]
+    with jobs_lock:
+        expired = [
+            jid for jid, jdata in jobs.items()
+            if jdata.get("completed_at") and now - jdata["completed_at"] > max_age
+        ]
+        for jid in expired:
+            del jobs[jid]
 
 
 _YT_URL_RE = re.compile(
@@ -62,6 +69,35 @@ def _validate_youtube_url(url: str) -> bool:
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "active_jobs": len(jobs)})
+
+
+@app.route("/api/keys", methods=["GET"])
+def get_keys():
+    """Return whether API keys are configured (not the actual keys)."""
+    return jsonify({
+        "openai": bool(os.getenv("OPENAI_API_KEY")),
+        "minimax": bool(os.getenv("MINIMAX_API_KEY")),
+    })
+
+
+@app.route("/api/keys", methods=["POST"])
+def set_keys():
+    """Allow users to set API keys at runtime."""
+    if API_TOKEN:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {API_TOKEN}":
+            return jsonify({"error": "Unauthorized"}), 401
+    data = request.json
+    openai_key = data.get("openai_key", "").strip()
+    minimax_key = data.get("minimax_key", "").strip()
+    minimax_group = data.get("minimax_group", "").strip()
+    if openai_key:
+        os.environ["OPENAI_API_KEY"] = openai_key
+    if minimax_key:
+        os.environ["MINIMAX_API_KEY"] = minimax_key
+    if minimax_group:
+        os.environ["MINIMAX_GROUP_ID"] = minimax_group
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -82,7 +118,10 @@ def start_translate():
     _cleanup_old_jobs()
 
     voice = data.get("voice", "rachel")
-    volume = max(0.0, min(1.0, float(data.get("volume", 0.15))))
+    try:
+        volume = max(0.0, min(1.0, float(data.get("volume", 0.15))))
+    except (TypeError, ValueError):
+        volume = 0.15
     model = data.get("model", "gpt-4o")
     # 驗證模型是否在白名單中，不在則使用預設值
     if model not in ALLOWED_MODELS:
@@ -95,7 +134,8 @@ def start_translate():
         quality = "720"
 
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"events": queue.Queue()}
+    with jobs_lock:
+        jobs[job_id] = {"events": queue.Queue()}
 
     thread = threading.Thread(
         target=_run_pipeline,
@@ -128,7 +168,8 @@ def start_live_translate():
     keep_bg = bool(data.get("keep_bg", False))
 
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"events": queue.Queue()}
+    with jobs_lock:
+        jobs[job_id] = {"events": queue.Queue()}
 
     thread = threading.Thread(
         target=_run_live_pipeline,
@@ -163,18 +204,25 @@ def serve_tts(job_id, filename):
 def progress(job_id):
     """SSE endpoint for real-time progress."""
     def generate():
-        job = jobs.get(job_id)
+        with jobs_lock:
+            job = jobs.get(job_id)
         if not job:
             yield f"data: {json.dumps({'status': 'error', 'message': 'Job not found'})}\n\n"
             return
 
+        heartbeat_count = 0
         while True:
             try:
                 event = job["events"].get(timeout=60)
+                heartbeat_count = 0
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                 if event.get("status") in ("completed", "error"):
                     break
             except queue.Empty:
+                heartbeat_count += 1
+                if heartbeat_count > 30:
+                    yield f"data: {json.dumps({'status': 'error', 'message': '連線逾時（30 分鐘無進度）'})}\n\n"
+                    break
                 yield f"data: {json.dumps({'status': 'heartbeat'})}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
@@ -195,19 +243,19 @@ def download(filename):
 
 def _emit(job_id, status, message, progress=0, **kwargs):
     event = {"status": status, "message": message, "progress": progress, **kwargs}
-    jobs[job_id]["events"].put(event)
-    # 當任務完成或出錯時標記時間戳，供 _cleanup_old_jobs 清理
-    if status in ("completed", "error"):
-        jobs[job_id]["completed_at"] = time.time()
+    with jobs_lock:
+        if job_id not in jobs:
+            return
+        jobs[job_id]["events"].put(event)
+        # 當任務完成或出錯時標記時間戳，供 _cleanup_old_jobs 清理
+        if status in ("completed", "error"):
+            jobs[job_id]["completed_at"] = time.time()
 
 
 def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="720", eng_subtitle=False, keep_bg=False):
     """Run the full translation pipeline in a background thread."""
+    job_temp = os.path.join(TEMP_DIR, job_id)
     try:
-        # Add project dir to path for imports
-        import sys
-        sys.path.insert(0, BASE_DIR)
-
         from openai import OpenAI
         from downloader import download_video
         from transcriber import transcribe
@@ -217,16 +265,16 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         from separator import separate_vocals
 
         openai_key = os.getenv("OPENAI_API_KEY")
-        elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+        minimax_key = os.getenv("MINIMAX_API_KEY")
+        minimax_group = os.getenv("MINIMAX_GROUP_ID", "")
 
-        if not openai_key or not elevenlabs_key:
-            _emit(job_id, "error", "API keys not configured in .env")
+        if not openai_key or not minimax_key:
+            _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
             return
 
         client = OpenAI(api_key=openai_key)
 
         # Use per-job temp directory to avoid concurrent conflicts
-        job_temp = os.path.join(TEMP_DIR, job_id)
         os.makedirs(job_temp, exist_ok=True)
 
         # Step 1: Download
@@ -285,14 +333,14 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
                   completed=completed, tts_total=total)
 
         tts_segments = generate_tts_batch(
-            translated, elevenlabs_key, job_temp,
-            voice=voice, max_workers=3, on_progress=on_tts,
+            translated, minimax_key, job_temp,
+            voice=voice, group_id=minimax_group, max_workers=3, on_progress=on_tts,
         )
 
         success = sum(1 for s in tts_segments if s.get("tts_path"))
         log.info(f"[TTS] {success}/{len(tts_segments)} segments generated successfully")
         if success == 0:
-            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 ElevenLabs API Key 是否正確")
+            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 MiniMax API Key 是否正確")
             return
         _emit(job_id, "processing", "synthesized", 90,
               step="tts", tts_success=success, tts_total=len(tts_segments))
@@ -304,7 +352,8 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
             c if c.isalnum() or c in " -_" else "_"
             for c in video_info["title"]
         )[:60]
-        out_path = os.path.join(OUTPUT_DIR, f"{safe_title}_cn.mp4")
+        out_filename = secure_filename(f"{safe_title}_{job_id[:8]}_cn.mp4")
+        out_path = os.path.join(OUTPUT_DIR, out_filename)
 
         compose_video(video_info["video_path"], tts_segments, out_path, volume,
                       subtitle=subtitle, eng_subtitle=eng_subtitle,
@@ -321,14 +370,14 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
     except Exception as e:
         log.exception(f"[Pipeline] Job {job_id} failed")
         _emit(job_id, "error", "處理過程發生錯誤，請稍後重試", 0)
+    finally:
+        shutil.rmtree(job_temp, ignore_errors=True)
 
 
 def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
     """Run live voice translation pipeline: audio → transcribe → translate → TTS."""
+    job_temp = os.path.join(TEMP_DIR, job_id)
     try:
-        import sys
-        sys.path.insert(0, BASE_DIR)
-
         from openai import OpenAI
         from downloader import download_audio_only
         from transcriber import transcribe
@@ -337,17 +386,17 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
         from separator import separate_vocals
 
         openai_key = os.getenv("OPENAI_API_KEY")
-        elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+        minimax_key = os.getenv("MINIMAX_API_KEY")
+        minimax_group = os.getenv("MINIMAX_GROUP_ID", "")
 
-        if not openai_key or not elevenlabs_key:
-            _emit(job_id, "error", "API keys not configured in .env")
+        if not openai_key or not minimax_key:
+            _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
             return
 
         client = OpenAI(api_key=openai_key)
 
         # Step 1: Download audio only (fast)
         # Use per-job temp directory
-        job_temp = os.path.join(TEMP_DIR, job_id)
         os.makedirs(job_temp, exist_ok=True)
 
         _emit(job_id, "processing", "downloading_audio", 5, step="download")
@@ -407,14 +456,14 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
                   completed=completed, tts_total=total)
 
         tts_segments = generate_tts_batch(
-            translated, elevenlabs_key, tts_dir,
-            voice=voice, max_workers=3, on_progress=on_tts,
+            translated, minimax_key, tts_dir,
+            voice=voice, group_id=minimax_group, max_workers=3, on_progress=on_tts,
         )
 
         success = sum(1 for s in tts_segments if s.get("tts_path"))
         log.info(f"[Live TTS] {success}/{len(tts_segments)} segments generated")
         if success == 0:
-            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 ElevenLabs API Key")
+            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 MiniMax API Key")
             return
 
         # Build response with audio URLs
@@ -442,6 +491,8 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False):
     except Exception as e:
         log.exception(f"[Pipeline] Job {job_id} failed")
         _emit(job_id, "error", "處理過程發生錯誤，請稍後重試", 0)
+    finally:
+        shutil.rmtree(job_temp, ignore_errors=True)
 
 
 if __name__ == "__main__":
