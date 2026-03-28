@@ -12,9 +12,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Optional: install demucs (background music separation)
-# Uncomment the next line if you have enough memory (requires ~1GB+ RAM)
-# RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir demucs>=4.0.0
+# Install demucs for background music separation (CPU-only PyTorch)
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir demucs>=4.0.0
 
 # Copy app files
 COPY . .
