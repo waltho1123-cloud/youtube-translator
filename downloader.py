@@ -61,7 +61,7 @@ def _download_audio_ytdlp(url: str, output_dir: str, cookies_file: str = None) -
     log.info(f"[Download] yt-dlp: downloading audio for {url} (cookies={'yes' if cookies_file else 'no'})")
     cmd = [
         "yt-dlp",
-        "-f", "bestaudio/bestaudio*/best",
+        "-x",  # extract audio (auto-selects best format, no -f needed)
         "-o", audio_raw + ".%(ext)s",
         "--no-playlist",
         "--no-check-certificates",
@@ -208,15 +208,14 @@ def _download_video_ytdlp(url: str, output_dir: str, quality: str, cookies_file:
     """
     video_path = os.path.join(output_dir, "source_video.mp4")
 
-    height = quality  # e.g. "720"
     cmd = [
         "yt-dlp",
-        "-f", f"bv*[height<={height}]+ba/bv*+ba/b",
         "--merge-output-format", "mp4",
         "-o", video_path,
         "--no-playlist",
         "--no-check-certificates",
         "--print-json",
+        "-S", f"res:{quality}",  # sort by resolution preference instead of -f
     ]
     if cookies_file:
         cmd += ["--cookies", cookies_file]
