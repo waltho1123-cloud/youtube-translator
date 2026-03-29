@@ -501,6 +501,7 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
         from translator import translate_segments
         from tts_engine import generate_tts_batch
         from separator import separate_vocals
+        from apify_download import get_transcript, download_audio as apify_download_audio
 
         if not openai_key or not minimax_key:
             _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
@@ -508,63 +509,88 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
 
         client = OpenAI(api_key=openai_key)
         cookies_file = write_cookies_file(youtube_cookies, job_temp) if youtube_cookies else None
-        log.info(f"[Live Pipeline] Job {job_id} started: url={url}, model={model}, voice={voice}, keep_bg={keep_bg}, cookies={'yes' if cookies_file else 'no'}")
+        log.info(f"[Live Pipeline] Job {job_id} started: url={url}, model={model}, voice={voice}, keep_bg={keep_bg}")
 
-        # Step 1: Download audio only (fast)
-        # Use per-job temp directory
         os.makedirs(job_temp, exist_ok=True)
-
-        _emit(job_id, "processing", "downloading_audio", 5, step="download")
-        try:
-            audio_info = download_audio_only(url, job_temp, cookies_file=cookies_file)
-        except Exception as e:
-            log.error(f"[Live Pipeline] Download failed: {e}")
-            _emit(job_id, "error", f"影片下載失敗: {str(e)[:200]}", 0)
-            return
-        log.info(f"[Live Pipeline] Downloaded: {audio_info['title']} ({audio_info['duration']}s)")
-        _emit(
-            job_id, "processing", "downloaded", 15,
-            step="download",
-            title=audio_info["title"],
-            duration=audio_info["duration"],
-        )
-
-        # Step 1.5: Separate vocals if keep_bg enabled
+        segments = None
         accompaniment_url = None
-        if keep_bg:
-            from separator import is_available as demucs_available
-            if not demucs_available():
-                _emit(job_id, "processing", "skip_separate", 18, step="separate")
-                log.warning("[Live Pipeline] Demucs not installed, skipping background music separation")
-            else:
-                _emit(job_id, "processing", "separating", 15, step="separate")
-                separated = separate_vocals(audio_info["audio_path"], job_temp)
-                # Copy accompaniment to serveable TTS dir
-                tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
-                os.makedirs(tts_dir, exist_ok=True)
-                import shutil as _shutil
-                bg_dest = os.path.join(tts_dir, "accompaniment.wav")
-                _shutil.copy2(separated["accompaniment"], bg_dest)
-                accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
-                _emit(job_id, "processing", "separated", 18, step="separate")
 
-        # Step 2: Transcribe
-        _emit(job_id, "processing", "transcribing", 18, step="transcribe")
-        try:
-            segments = transcribe(audio_info["audio_path"], client)
-        except Exception as e:
-            log.error(f"[Live Pipeline] Transcription failed: {e}")
-            _emit(job_id, "error", f"語音辨識失敗: {str(e)[:200]}", 0)
-            return
-        log.info(f"[Live Pipeline] Transcribed: {len(segments)} segments")
-        _emit(
-            job_id, "processing", "transcribed", 35,
-            step="transcribe",
-            segment_count=len(segments),
-        )
+        # ── Strategy 1: Try Apify transcript (fastest, cheapest, 99.95% reliable) ──
+        _emit(job_id, "processing", "fetching_transcript", 5, step="download")
+        segments = get_transcript(url)
+        if segments:
+            log.info(f"[Live Pipeline] Got transcript directly via Apify: {len(segments)} segments")
+            _emit(job_id, "processing", "transcribed", 35,
+                  step="transcribe", segment_count=len(segments))
+        else:
+            # ── Strategy 2: Download audio, then Whisper ──
+            log.info("[Live Pipeline] No transcript available, downloading audio...")
+            _emit(job_id, "processing", "downloading_audio", 8, step="download")
+
+            audio_info = None
+            # 2a: Try Apify audio download
+            try:
+                audio_info_raw = apify_download_audio(url, job_temp)
+                # Convert to WAV for Whisper
+                import subprocess
+                wav_path = os.path.join(job_temp, "source_audio.wav")
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", audio_info_raw["raw_path"],
+                     "-vn", "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le", wav_path],
+                    capture_output=True, check=True, timeout=300,
+                )
+                audio_info = {
+                    "audio_path": wav_path,
+                    "title": audio_info_raw["title"],
+                    "duration": audio_info_raw["duration"],
+                }
+                log.info("[Live Pipeline] Apify audio download succeeded")
+            except Exception as e:
+                log.warning(f"[Live Pipeline] Apify audio download failed: {e}")
+
+            # 2b: Fallback to yt-dlp
+            if not audio_info:
+                try:
+                    audio_info = download_audio_only(url, job_temp, cookies_file=cookies_file)
+                    log.info("[Live Pipeline] yt-dlp download succeeded")
+                except Exception as e2:
+                    log.error(f"[Live Pipeline] All download methods failed: {e2}")
+                    _emit(job_id, "error", f"影片下載失敗: {str(e2)[:200]}", 0)
+                    return
+
+            _emit(job_id, "processing", "downloaded", 15, step="download",
+                  title=audio_info.get("title", ""), duration=audio_info.get("duration", 0))
+
+            # Separate vocals if keep_bg enabled
+            if keep_bg:
+                from separator import is_available as demucs_available
+                if not demucs_available():
+                    _emit(job_id, "processing", "skip_separate", 18, step="separate")
+                else:
+                    _emit(job_id, "processing", "separating", 15, step="separate")
+                    separated = separate_vocals(audio_info["audio_path"], job_temp)
+                    tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
+                    os.makedirs(tts_dir, exist_ok=True)
+                    import shutil as _shutil
+                    bg_dest = os.path.join(tts_dir, "accompaniment.wav")
+                    _shutil.copy2(separated["accompaniment"], bg_dest)
+                    accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
+                    _emit(job_id, "processing", "separated", 18, step="separate")
+
+            # Transcribe with Whisper
+            _emit(job_id, "processing", "transcribing", 18, step="transcribe")
+            try:
+                segments = transcribe(audio_info["audio_path"], client)
+            except Exception as e:
+                log.error(f"[Live Pipeline] Transcription failed: {e}")
+                _emit(job_id, "error", f"語音辨識失敗: {str(e)[:200]}", 0)
+                return
+            log.info(f"[Live Pipeline] Transcribed: {len(segments)} segments")
+            _emit(job_id, "processing", "transcribed", 35,
+                  step="transcribe", segment_count=len(segments))
 
         if not segments:
-            _emit(job_id, "error", "語音辨識未找到任何語音內容，請確認影片含有英語對話", 0)
+            _emit(job_id, "error", "無法取得字幕或語音辨識內容，請確認影片含有英語對話", 0)
             return
 
         # Step 3: Translate
