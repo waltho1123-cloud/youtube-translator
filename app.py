@@ -25,13 +25,19 @@ load_dotenv()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
-logging.basicConfig(
-    filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline.log"),
-    level=logging.INFO,
-    format="%(asctime)s %(message)s",
-    force=True,
-)
 log = logging.getLogger("pipeline")
+log.setLevel(logging.INFO)
+_fmt = logging.Formatter("%(asctime)s %(message)s")
+# Log to stdout so Zeabur runtime logs can capture output
+_sh = logging.StreamHandler(sys.stdout)
+_sh.setFormatter(_fmt)
+log.addHandler(_sh)
+# Also log to file for local debugging
+_fh = logging.FileHandler(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline.log")
+)
+_fh.setFormatter(_fmt)
+log.addHandler(_fh)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())
@@ -467,7 +473,8 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
 
     except Exception as e:
         log.exception(f"[Pipeline] Job {job_id} failed")
-        _emit(job_id, "error", "處理過程發生錯誤，請稍後重試", 0)
+        err_detail = str(e)[:200] if str(e) else type(e).__name__
+        _emit(job_id, "error", f"處理過程發生錯誤: {err_detail}", 0)
     finally:
         shutil.rmtree(job_temp, ignore_errors=True)
 
@@ -489,13 +496,20 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             return
 
         client = OpenAI(api_key=openai_key)
+        log.info(f"[Live Pipeline] Job {job_id} started: url={url}, model={model}, voice={voice}, keep_bg={keep_bg}")
 
         # Step 1: Download audio only (fast)
         # Use per-job temp directory
         os.makedirs(job_temp, exist_ok=True)
 
         _emit(job_id, "processing", "downloading_audio", 5, step="download")
-        audio_info = download_audio_only(url, job_temp)
+        try:
+            audio_info = download_audio_only(url, job_temp)
+        except Exception as e:
+            log.error(f"[Live Pipeline] Download failed: {e}")
+            _emit(job_id, "error", f"影片下載失敗: {str(e)[:200]}", 0)
+            return
+        log.info(f"[Live Pipeline] Downloaded: {audio_info['title']} ({audio_info['duration']}s)")
         _emit(
             job_id, "processing", "downloaded", 15,
             step="download",
@@ -524,12 +538,22 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
 
         # Step 2: Transcribe
         _emit(job_id, "processing", "transcribing", 18, step="transcribe")
-        segments = transcribe(audio_info["audio_path"], client)
+        try:
+            segments = transcribe(audio_info["audio_path"], client)
+        except Exception as e:
+            log.error(f"[Live Pipeline] Transcription failed: {e}")
+            _emit(job_id, "error", f"語音辨識失敗: {str(e)[:200]}", 0)
+            return
+        log.info(f"[Live Pipeline] Transcribed: {len(segments)} segments")
         _emit(
             job_id, "processing", "transcribed", 35,
             step="transcribe",
             segment_count=len(segments),
         )
+
+        if not segments:
+            _emit(job_id, "error", "語音辨識未找到任何語音內容，請確認影片含有英語對話", 0)
+            return
 
         # Step 3: Translate
         _emit(job_id, "processing", "translating", 38, step="translate")
@@ -539,9 +563,15 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             _emit(job_id, "processing", "translating", p, step="translate",
                   batch=batch, total_batches=total)
 
-        translated = translate_segments(
-            segments, client, model=model, on_progress=on_translate,
-        )
+        try:
+            translated = translate_segments(
+                segments, client, model=model, on_progress=on_translate,
+            )
+        except Exception as e:
+            log.error(f"[Live Pipeline] Translation failed: {e}")
+            _emit(job_id, "error", f"翻譯失敗: {str(e)[:200]}", 0)
+            return
+        log.info(f"[Live Pipeline] Translated: {len(translated)} segments")
         _emit(job_id, "processing", "translated", 60, step="translate",
               total_segments=len(translated))
 
@@ -563,7 +593,7 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
         success = sum(1 for s in tts_segments if s.get("tts_path"))
         log.info(f"[Live TTS] {success}/{len(tts_segments)} segments generated")
         if success == 0:
-            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 MiniMax API Key")
+            _emit(job_id, "error", "TTS 語音合成全部失敗，請檢查 MiniMax API Key 是否正確", 0)
             return
 
         # Build response with audio URLs
@@ -578,19 +608,22 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             all_segments.append(seg)
 
         # Clean up source files in job_temp, keep TTS files for serving
-        for f in os.listdir(job_temp):
-            fp = os.path.join(job_temp, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
+        if os.path.isdir(job_temp):
+            for f in os.listdir(job_temp):
+                fp = os.path.join(job_temp, f)
+                if os.path.isfile(fp):
+                    os.remove(fp)
 
         _emit(job_id, "processing", "synthesized", 97,
               step="tts", tts_success=success, tts_total=len(tts_segments))
+        log.info(f"[Live Pipeline] Job {job_id} completed successfully")
         _emit(job_id, "completed", "done", 100,
               segments=all_segments, accompaniment=accompaniment_url)
 
     except Exception as e:
-        log.exception(f"[Pipeline] Job {job_id} failed")
-        _emit(job_id, "error", "處理過程發生錯誤，請稍後重試", 0)
+        log.exception(f"[Live Pipeline] Job {job_id} failed with unexpected error")
+        err_detail = str(e)[:200] if str(e) else type(e).__name__
+        _emit(job_id, "error", f"處理過程發生未預期錯誤: {err_detail}", 0)
     finally:
         shutil.rmtree(job_temp, ignore_errors=True)
 
