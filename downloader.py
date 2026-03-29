@@ -8,7 +8,7 @@ import tempfile
 log = logging.getLogger("pipeline")
 
 
-def write_cookies_file(cookies_text: str, output_dir: str) -> str | None:
+def write_cookies_file(cookies_text: str, output_dir: str):
     """Write Netscape-format cookies to a temp file for yt-dlp.
 
     Returns the file path, or None if cookies_text is empty.
@@ -23,41 +23,38 @@ def write_cookies_file(cookies_text: str, output_dir: str) -> str | None:
 
 
 def _download_audio_ytdlp(url: str, output_dir: str, cookies_file: str = None) -> dict:
-    """Download audio using yt-dlp (more reliable)."""
+    """Download audio using yt-dlp (more reliable).
+
+    Uses --print-json to combine download + info in a single step,
+    and flexible format selectors to handle restricted videos.
+    """
     audio_raw = os.path.join(output_dir, "source_audio_raw")
 
-    # First get video info
-    log.info(f"[Download] yt-dlp: fetching info for {url} (cookies={'yes' if cookies_file else 'no'})")
-    cmd_info = ["yt-dlp", "--dump-json", "--no-download",
-                "--no-check-certificates", "--no-warnings"]
+    log.info(f"[Download] yt-dlp: downloading audio for {url} (cookies={'yes' if cookies_file else 'no'})")
+    cmd = [
+        "yt-dlp",
+        # Flexible format: best audio-only → best audio stream → best overall
+        "-f", "bestaudio/bestaudio*/best",
+        "-o", audio_raw + ".%(ext)s",
+        "--no-playlist",
+        "--no-check-certificates",
+        "--print-json",  # print video info JSON to stdout while downloading
+    ]
     if cookies_file:
-        cmd_info += ["--cookies", cookies_file]
-    cmd_info.append(url)
-    result = subprocess.run(cmd_info, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
+        cmd += ["--cookies", cookies_file]
+    cmd.append(url)
 
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed: {result.stderr[:300]}")
+
+    # Parse JSON info from stdout
     info = json.loads(result.stdout)
     title = info.get("title", "Unknown")
     duration = info.get("duration", 0)
 
     if duration and duration > 1800:
         raise ValueError("影片過長（超過 30 分鐘），請選擇較短的影片")
-
-    # Download best audio
-    log.info(f"[Download] yt-dlp: downloading audio for '{title}'")
-    cmd_dl = [
-        "yt-dlp", "-f", "bestaudio",
-        "-o", audio_raw + ".%(ext)s",
-        "--no-playlist",
-        "--no-check-certificates",
-    ]
-    if cookies_file:
-        cmd_dl += ["--cookies", cookies_file]
-    cmd_dl.append(url)
-    result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:300]}")
 
     # Find the downloaded file
     downloaded = None
@@ -69,6 +66,7 @@ def _download_audio_ytdlp(url: str, output_dir: str, cookies_file: str = None) -
     if not downloaded or not os.path.exists(downloaded):
         raise RuntimeError("yt-dlp: downloaded file not found")
 
+    log.info(f"[Download] yt-dlp: got '{title}' ({duration}s)")
     return {"raw_path": downloaded, "title": title, "duration": duration}
 
 
@@ -157,18 +155,29 @@ def download_audio_only(url: str, output_dir: str, cookies_file: str = None) -> 
 
 
 def _download_video_ytdlp(url: str, output_dir: str, quality: str, cookies_file: str = None) -> dict:
-    """Download video using yt-dlp."""
+    """Download video using yt-dlp.
+
+    Uses --print-json to combine download + info, with flexible format selectors.
+    """
     video_path = os.path.join(output_dir, "source_video.mp4")
 
-    # Get info first
-    cmd_info = ["yt-dlp", "--dump-json", "--no-download",
-                "--no-check-certificates", "--no-warnings"]
+    height = quality  # e.g. "720"
+    cmd = [
+        "yt-dlp",
+        "-f", f"bv*[height<={height}]+ba/bv*+ba/b",
+        "--merge-output-format", "mp4",
+        "-o", video_path,
+        "--no-playlist",
+        "--no-check-certificates",
+        "--print-json",
+    ]
     if cookies_file:
-        cmd_info += ["--cookies", cookies_file]
-    cmd_info.append(url)
-    result = subprocess.run(cmd_info, capture_output=True, text=True, timeout=60)
+        cmd += ["--cookies", cookies_file]
+    cmd.append(url)
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
+        raise RuntimeError(f"yt-dlp failed: {result.stderr[:300]}")
 
     info = json.loads(result.stdout)
     title = info.get("title", "Unknown")
@@ -176,23 +185,6 @@ def _download_video_ytdlp(url: str, output_dir: str, quality: str, cookies_file:
 
     if duration and duration > 1800:
         raise ValueError("影片過長（超過 30 分鐘），請選擇較短的影片")
-
-    # Download video+audio merged
-    height = quality  # e.g. "720"
-    cmd_dl = [
-        "yt-dlp",
-        "-f", f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best",
-        "--merge-output-format", "mp4",
-        "-o", video_path,
-        "--no-playlist",
-        "--no-check-certificates",
-    ]
-    if cookies_file:
-        cmd_dl += ["--cookies", cookies_file]
-    cmd_dl.append(url)
-    result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=600)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:300]}")
 
     if not os.path.exists(video_path):
         raise FileNotFoundError("yt-dlp: video file not found after download")
