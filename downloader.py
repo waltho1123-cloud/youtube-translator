@@ -14,11 +14,13 @@ def _download_audio_ytdlp(url: str, output_dir: str) -> dict:
     # First get video info
     log.info(f"[Download] yt-dlp: fetching info for {url}")
     result = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-download", url],
+        ["yt-dlp", "--dump-json", "--no-download",
+         "--no-check-certificates", "--no-warnings",
+         url],
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:200]}")
+        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
 
     info = json.loads(result.stdout)
     title = info.get("title", "Unknown")
@@ -28,17 +30,19 @@ def _download_audio_ytdlp(url: str, output_dir: str) -> dict:
         raise ValueError("影片過長（超過 30 分鐘），請選擇較短的影片")
 
     # Download best audio
+    log.info(f"[Download] yt-dlp: downloading audio for '{title}'")
     result = subprocess.run(
         [
             "yt-dlp", "-f", "bestaudio",
             "-o", audio_raw + ".%(ext)s",
             "--no-playlist",
+            "--no-check-certificates",
             url,
         ],
         capture_output=True, text=True, timeout=300,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:200]}")
+        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:300]}")
 
     # Find the downloaded file
     downloaded = None
@@ -143,11 +147,13 @@ def _download_video_ytdlp(url: str, output_dir: str, quality: str) -> dict:
 
     # Get info first
     result = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-download", url],
+        ["yt-dlp", "--dump-json", "--no-download",
+         "--no-check-certificates", "--no-warnings",
+         url],
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:200]}")
+        raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
 
     info = json.loads(result.stdout)
     title = info.get("title", "Unknown")
@@ -165,6 +171,7 @@ def _download_video_ytdlp(url: str, output_dir: str, quality: str) -> dict:
             "--merge-output-format", "mp4",
             "-o", video_path,
             "--no-playlist",
+            "--no-check-certificates",
             url,
         ],
         capture_output=True, text=True, timeout=600,

@@ -1,9 +1,10 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies (Node.js needed by yt-dlp for YouTube NSIG challenge)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure Python output is sent straight to stdout/stderr without buffering
