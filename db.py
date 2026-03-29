@@ -29,8 +29,17 @@ def init_db():
         avatar TEXT DEFAULT '',
         openai_key TEXT DEFAULT '',
         minimax_key TEXT DEFAULT '',
-        minimax_group TEXT DEFAULT ''
+        minimax_group TEXT DEFAULT '',
+        youtube_cookies TEXT DEFAULT ''
     )''')
+    # Migration: add youtube_cookies column if missing
+    try:
+        cursor = conn.execute("PRAGMA table_info(users)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'youtube_cookies' not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN youtube_cookies TEXT DEFAULT ''")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -91,10 +100,19 @@ def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=N
     conn.close()
 
 
+def update_youtube_cookies(user_id, cookies):
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET youtube_cookies = ? WHERE id = ?", (cookies, user_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_user_keys(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT openai_key, minimax_key, minimax_group FROM users WHERE id = ?",
+        "SELECT openai_key, minimax_key, minimax_group, youtube_cookies FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     conn.close()

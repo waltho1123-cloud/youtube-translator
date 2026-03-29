@@ -154,6 +154,26 @@
                        class="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
                               placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
             </div>
+            <!-- YouTube Cookies -->
+            <div class="border-t border-slate-600 pt-4">
+                <button onclick="document.getElementById('cookiesSection').classList.toggle('hidden')"
+                        class="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white w-full">
+                    <span>YouTube Cookies</span>
+                    <span id="cookiesStatus" class="text-xs text-gray-500"></span>
+                    <svg class="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="cookiesSection" class="hidden mt-2 space-y-2">
+                    <p class="text-xs text-gray-500">
+                        YouTube 會封鎖雲端伺服器，需要提供瀏覽器 Cookies 來下載影片。
+                        請使用瀏覽器擴充功能
+                        <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" class="text-indigo-400 hover:underline">Get cookies.txt LOCALLY</a>
+                        匯出 YouTube 的 cookies，然後貼到下方。
+                    </p>
+                    <textarea id="cookiesInput" rows="4" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;0&#9;COOKIE_NAME&#9;COOKIE_VALUE"
+                              class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-xl text-white text-xs font-mono
+                                     placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y"></textarea>
+                </div>
+            </div>
             <button id="saveKeysBtn" onclick="saveKeys()"
                     class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors">
                 儲存設定
@@ -979,6 +999,10 @@ async function loadKeyStatus() {
             data.minimax ? '已設定' : '未設定';
         document.getElementById('minimaxKeyStatus').className =
             'text-xs mt-1 ' + (data.minimax ? 'text-green-400' : 'text-red-400');
+        document.getElementById('cookiesStatus').textContent =
+            data.youtube_cookies ? '(已設定)' : '(未設定 - 可能無法下載)';
+        document.getElementById('cookiesStatus').className =
+            'text-xs ' + (data.youtube_cookies ? 'text-green-400' : 'text-yellow-400');
     } catch (e) {}
 }
 
@@ -986,27 +1010,44 @@ async function saveKeys() {
     const openaiKey = document.getElementById('openaiKeyInput').value.trim();
     const minimaxKey = document.getElementById('minimaxKeyInput').value.trim();
     const minimaxGroup = document.getElementById('minimaxGroupInput').value.trim();
+    const cookiesText = document.getElementById('cookiesInput').value.trim();
     const modal = document.getElementById('settingsModal');
 
-    if (!openaiKey && !minimaxKey && !minimaxGroup) {
+    if (!openaiKey && !minimaxKey && !minimaxGroup && !cookiesText) {
         modal.classList.remove('active');
         return;
     }
 
     const msgEl = document.getElementById('keySaveMsg');
     try {
-        const resp = await fetch('/api/keys', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ openai_key: openaiKey, minimax_key: minimaxKey, minimax_group: minimaxGroup }),
-        });
-        if (resp.ok) {
+        // Save API keys
+        const promises = [];
+        if (openaiKey || minimaxKey || minimaxGroup) {
+            promises.push(fetch('/api/keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ openai_key: openaiKey, minimax_key: minimaxKey, minimax_group: minimaxGroup }),
+            }));
+        }
+        // Save YouTube cookies
+        if (cookiesText) {
+            promises.push(fetch('/api/youtube-cookies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cookies: cookiesText }),
+            }));
+        }
+        const results = await Promise.all(promises);
+        const allOk = results.every(r => r.ok);
+        if (allOk) {
             document.getElementById('openaiKeyInput').value = '';
             document.getElementById('minimaxKeyInput').value = '';
             document.getElementById('minimaxGroupInput').value = '';
+            document.getElementById('cookiesInput').value = '';
             msgEl.textContent = '設定已儲存';
             msgEl.className = 'text-center text-sm text-green-400';
             msgEl.classList.remove('hidden');
+            loadKeyStatus();
             setTimeout(function() {
                 msgEl.classList.add('hidden');
                 modal.classList.remove('active');
@@ -1014,7 +1055,7 @@ async function saveKeys() {
             return;
         } else {
             var errData = null;
-            try { errData = await resp.json(); } catch(e) {}
+            try { errData = await results[0].json(); } catch(e) {}
             var errMsg = (errData && errData.error) ? errData.error : '儲存失敗，請重試';
             msgEl.textContent = errMsg;
             msgEl.className = 'text-center text-sm text-red-400';

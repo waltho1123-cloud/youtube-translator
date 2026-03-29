@@ -3,22 +3,37 @@ import json
 import logging
 import os
 import subprocess
+import tempfile
 
 log = logging.getLogger("pipeline")
 
 
-def _download_audio_ytdlp(url: str, output_dir: str) -> dict:
+def write_cookies_file(cookies_text: str, output_dir: str) -> str | None:
+    """Write Netscape-format cookies to a temp file for yt-dlp.
+
+    Returns the file path, or None if cookies_text is empty.
+    """
+    if not cookies_text or not cookies_text.strip():
+        return None
+    os.makedirs(output_dir, exist_ok=True)
+    path = os.path.join(output_dir, "cookies.txt")
+    with open(path, "w") as f:
+        f.write(cookies_text)
+    return path
+
+
+def _download_audio_ytdlp(url: str, output_dir: str, cookies_file: str = None) -> dict:
     """Download audio using yt-dlp (more reliable)."""
     audio_raw = os.path.join(output_dir, "source_audio_raw")
 
     # First get video info
-    log.info(f"[Download] yt-dlp: fetching info for {url}")
-    result = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-download",
-         "--no-check-certificates", "--no-warnings",
-         url],
-        capture_output=True, text=True, timeout=60,
-    )
+    log.info(f"[Download] yt-dlp: fetching info for {url} (cookies={'yes' if cookies_file else 'no'})")
+    cmd_info = ["yt-dlp", "--dump-json", "--no-download",
+                "--no-check-certificates", "--no-warnings"]
+    if cookies_file:
+        cmd_info += ["--cookies", cookies_file]
+    cmd_info.append(url)
+    result = subprocess.run(cmd_info, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
 
@@ -31,16 +46,16 @@ def _download_audio_ytdlp(url: str, output_dir: str) -> dict:
 
     # Download best audio
     log.info(f"[Download] yt-dlp: downloading audio for '{title}'")
-    result = subprocess.run(
-        [
-            "yt-dlp", "-f", "bestaudio",
-            "-o", audio_raw + ".%(ext)s",
-            "--no-playlist",
-            "--no-check-certificates",
-            url,
-        ],
-        capture_output=True, text=True, timeout=300,
-    )
+    cmd_dl = [
+        "yt-dlp", "-f", "bestaudio",
+        "-o", audio_raw + ".%(ext)s",
+        "--no-playlist",
+        "--no-check-certificates",
+    ]
+    if cookies_file:
+        cmd_dl += ["--cookies", cookies_file]
+    cmd_dl.append(url)
+    result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:
         raise RuntimeError(f"yt-dlp download failed: {result.stderr[:300]}")
 
@@ -80,7 +95,7 @@ def _download_audio_pytubefix(url: str, output_dir: str) -> dict:
     return {"raw_path": audio_raw, "title": yt.title, "duration": yt.length}
 
 
-def download_audio_only(url: str, output_dir: str) -> dict:
+def download_audio_only(url: str, output_dir: str, cookies_file: str = None) -> dict:
     """Download only audio from YouTube for transcription (much faster).
 
     Uses yt-dlp as primary downloader, falls back to pytubefix.
@@ -98,7 +113,7 @@ def download_audio_only(url: str, output_dir: str) -> dict:
     result = None
     yt_dlp_err = None
     try:
-        result = _download_audio_ytdlp(url, output_dir)
+        result = _download_audio_ytdlp(url, output_dir, cookies_file=cookies_file)
         log.info("[Download] yt-dlp audio succeeded")
     except Exception as e:
         yt_dlp_err = e
@@ -141,17 +156,17 @@ def download_audio_only(url: str, output_dir: str) -> dict:
     }
 
 
-def _download_video_ytdlp(url: str, output_dir: str, quality: str) -> dict:
+def _download_video_ytdlp(url: str, output_dir: str, quality: str, cookies_file: str = None) -> dict:
     """Download video using yt-dlp."""
     video_path = os.path.join(output_dir, "source_video.mp4")
 
     # Get info first
-    result = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-download",
-         "--no-check-certificates", "--no-warnings",
-         url],
-        capture_output=True, text=True, timeout=60,
-    )
+    cmd_info = ["yt-dlp", "--dump-json", "--no-download",
+                "--no-check-certificates", "--no-warnings"]
+    if cookies_file:
+        cmd_info += ["--cookies", cookies_file]
+    cmd_info.append(url)
+    result = subprocess.run(cmd_info, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         raise RuntimeError(f"yt-dlp info failed: {result.stderr[:300]}")
 
@@ -164,20 +179,20 @@ def _download_video_ytdlp(url: str, output_dir: str, quality: str) -> dict:
 
     # Download video+audio merged
     height = quality  # e.g. "720"
-    result = subprocess.run(
-        [
-            "yt-dlp",
-            "-f", f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best",
-            "--merge-output-format", "mp4",
-            "-o", video_path,
-            "--no-playlist",
-            "--no-check-certificates",
-            url,
-        ],
-        capture_output=True, text=True, timeout=600,
-    )
+    cmd_dl = [
+        "yt-dlp",
+        "-f", f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best",
+        "--merge-output-format", "mp4",
+        "-o", video_path,
+        "--no-playlist",
+        "--no-check-certificates",
+    ]
+    if cookies_file:
+        cmd_dl += ["--cookies", cookies_file]
+    cmd_dl.append(url)
+    result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:200]}")
+        raise RuntimeError(f"yt-dlp download failed: {result.stderr[:300]}")
 
     if not os.path.exists(video_path):
         raise FileNotFoundError("yt-dlp: video file not found after download")
@@ -262,13 +277,14 @@ def _download_video_pytubefix(url: str, output_dir: str, quality: str) -> dict:
     return {"video_path": video_path, "title": yt.title, "duration": yt.length}
 
 
-def download_video(url: str, output_dir: str, quality: str = "720") -> dict:
+def download_video(url: str, output_dir: str, quality: str = "720", cookies_file: str = None) -> dict:
     """Download video from YouTube and extract audio as WAV.
 
     Uses yt-dlp as primary downloader, falls back to pytubefix.
 
     Args:
         quality: Target resolution - "1080", "720", or "480"
+        cookies_file: Path to Netscape-format cookies file
 
     Returns:
         dict with video_path, audio_path, title, duration
@@ -285,7 +301,7 @@ def download_video(url: str, output_dir: str, quality: str = "720") -> dict:
     # Try yt-dlp first, fallback to pytubefix
     result = None
     try:
-        result = _download_video_ytdlp(url, output_dir, quality)
+        result = _download_video_ytdlp(url, output_dir, quality, cookies_file=cookies_file)
         log.info("[Download] yt-dlp video succeeded")
     except Exception as e:
         log.warning(f"[Download] yt-dlp video failed: {e}, trying pytubefix")

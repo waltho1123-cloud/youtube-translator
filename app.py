@@ -155,6 +155,7 @@ def get_keys():
     return jsonify({
         "openai": bool(keys.get("openai_key")),
         "minimax": bool(keys.get("minimax_key")),
+        "youtube_cookies": bool(keys.get("youtube_cookies")),
     })
 
 
@@ -176,6 +177,17 @@ def set_keys():
     return jsonify({"ok": True})
 
 
+@app.route("/api/youtube-cookies", methods=["POST"])
+def set_youtube_cookies():
+    """Save YouTube cookies for bypassing bot detection."""
+    if not current_user.is_authenticated:
+        return jsonify({"error": "請先登入"}), 401
+    data = request.json
+    cookies = data.get("cookies", "").strip()
+    db.update_youtube_cookies(current_user.id, cookies)
+    return jsonify({"ok": True})
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -189,6 +201,7 @@ def start_translate():
     openai_key = keys.get("openai_key", "")
     minimax_key = keys.get("minimax_key", "")
     minimax_group = keys.get("minimax_group", "")
+    youtube_cookies = keys.get("youtube_cookies", "")
     if not openai_key or not minimax_key:
         return jsonify({"error": "請先在設定中填寫 API Key"}), 400
 
@@ -225,7 +238,7 @@ def start_translate():
     thread = threading.Thread(
         target=_run_pipeline,
         args=(job_id, url, voice, volume, model, subtitle, quality, eng_subtitle, keep_bg,
-              openai_key, minimax_key, minimax_group),
+              openai_key, minimax_key, minimax_group, youtube_cookies),
         daemon=True,
     )
     thread.start()
@@ -242,6 +255,7 @@ def start_live_translate():
     openai_key = keys.get("openai_key", "")
     minimax_key = keys.get("minimax_key", "")
     minimax_group = keys.get("minimax_group", "")
+    youtube_cookies = keys.get("youtube_cookies", "")
     if not openai_key or not minimax_key:
         return jsonify({"error": "請先在設定中填寫 API Key"}), 400
 
@@ -269,7 +283,7 @@ def start_live_translate():
     thread = threading.Thread(
         target=_run_live_pipeline,
         args=(job_id, url, model, voice, keep_bg,
-              openai_key, minimax_key, minimax_group),
+              openai_key, minimax_key, minimax_group, youtube_cookies),
         daemon=True,
     )
     thread.start()
@@ -349,12 +363,13 @@ def _emit(job_id, status, message, progress=0, **kwargs):
 
 
 def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="720", eng_subtitle=False, keep_bg=False,
-                   openai_key="", minimax_key="", minimax_group=""):
+                   openai_key="", minimax_key="", minimax_group="", youtube_cookies=""):
     """Run the full translation pipeline in a background thread."""
     job_temp = os.path.join(TEMP_DIR, job_id)
+    cookies_file = None
     try:
         from openai import OpenAI
-        from downloader import download_video
+        from downloader import download_video, write_cookies_file
         from transcriber import transcribe
         from translator import translate_segments
         from tts_engine import generate_tts_batch
@@ -366,13 +381,14 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
             return
 
         client = OpenAI(api_key=openai_key)
+        cookies_file = write_cookies_file(youtube_cookies, job_temp) if youtube_cookies else None
 
         # Use per-job temp directory to avoid concurrent conflicts
         os.makedirs(job_temp, exist_ok=True)
 
         # Step 1: Download
         _emit(job_id, "processing", "downloading", 5, step="download")
-        video_info = download_video(url, job_temp, quality=quality)
+        video_info = download_video(url, job_temp, quality=quality, cookies_file=cookies_file)
         _emit(
             job_id, "processing", "downloaded", 18,
             step="download",
@@ -474,12 +490,13 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
 
 
 def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
-                       openai_key="", minimax_key="", minimax_group=""):
+                       openai_key="", minimax_key="", minimax_group="", youtube_cookies=""):
     """Run live voice translation pipeline: audio -> transcribe -> translate -> TTS."""
     job_temp = os.path.join(TEMP_DIR, job_id)
+    cookies_file = None
     try:
         from openai import OpenAI
-        from downloader import download_audio_only
+        from downloader import download_audio_only, write_cookies_file
         from transcriber import transcribe
         from translator import translate_segments
         from tts_engine import generate_tts_batch
@@ -490,7 +507,8 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             return
 
         client = OpenAI(api_key=openai_key)
-        log.info(f"[Live Pipeline] Job {job_id} started: url={url}, model={model}, voice={voice}, keep_bg={keep_bg}")
+        cookies_file = write_cookies_file(youtube_cookies, job_temp) if youtube_cookies else None
+        log.info(f"[Live Pipeline] Job {job_id} started: url={url}, model={model}, voice={voice}, keep_bg={keep_bg}, cookies={'yes' if cookies_file else 'no'}")
 
         # Step 1: Download audio only (fast)
         # Use per-job temp directory
@@ -498,7 +516,7 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
 
         _emit(job_id, "processing", "downloading_audio", 5, step="download")
         try:
-            audio_info = download_audio_only(url, job_temp)
+            audio_info = download_audio_only(url, job_temp, cookies_file=cookies_file)
         except Exception as e:
             log.error(f"[Live Pipeline] Download failed: {e}")
             _emit(job_id, "error", f"影片下載失敗: {str(e)[:200]}", 0)
