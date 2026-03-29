@@ -11,7 +11,18 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
 
 # Actor IDs
 TRANSCRIPT_ACTOR = "pintostudio~youtube-transcript-scraper"
-DOWNLOADER_ACTOR = "streamers~youtube-video-downloader"
+
+# Multiple download actors to try (different input formats)
+DOWNLOAD_ACTORS = [
+    {
+        "id": "streamers~youtube-video-downloader",
+        "input": lambda url: {"startUrls": [{"url": url}], "format": "mp3"},
+    },
+    {
+        "id": "philippe.trounev~youtube-video-audio-and-transcript-downloader-actor",
+        "input": lambda url: {"urls": [url], "format": "mp3"},
+    },
+]
 
 
 def _extract_video_id(url: str) -> str:
@@ -87,115 +98,104 @@ def get_transcript(url: str) -> list:
         return []
 
 
+def _find_download_url(item: dict) -> str:
+    """Extract download URL from Apify result item (handles various actor formats)."""
+    # Direct URL fields
+    for key in ("downloadUrl", "audioUrl", "url", "mediaUrl", "fileUrl"):
+        val = item.get(key)
+        if val and isinstance(val, str) and val.startswith("http"):
+            return val
+
+    # Nested in media/files arrays
+    for key in ("media", "files", "downloads"):
+        nested = item.get(key)
+        if isinstance(nested, list) and nested:
+            for sub in nested:
+                if isinstance(sub, dict):
+                    for k in ("url", "link", "downloadUrl"):
+                        val = sub.get(k)
+                        if val and isinstance(val, str) and val.startswith("http"):
+                            return val
+
+    # Key-value store (some actors store file in KV store)
+    return ""
+
+
 def download_audio(url: str, output_dir: str) -> dict:
-    """Download YouTube audio via Apify actor.
+    """Download YouTube audio via Apify actors.
+
+    Tries multiple actors with their specific input formats.
 
     Returns:
-        dict with audio_path, title, duration
+        dict with raw_path, title, duration
     Raises:
-        RuntimeError if download fails
+        RuntimeError if all actors fail
     """
     if not APIFY_TOKEN:
         raise RuntimeError("APIFY_TOKEN not configured")
 
     video_id = _extract_video_id(url)
     log.info(f"[Apify] Downloading audio for {video_id}")
-
     os.makedirs(output_dir, exist_ok=True)
 
-    # Start the actor run
-    try:
-        resp = requests.post(
-            f"https://api.apify.com/v2/acts/{DOWNLOADER_ACTOR}/runs",
-            headers={
-                "Authorization": f"Bearer {APIFY_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            params={"timeout": 120},
-            json={
-                "urls": [url],
-                "format": "mp3",
-                "quality": "128",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        run_data = resp.json()["data"]
-        run_id = run_data["id"]
-        dataset_id = run_data["defaultDatasetId"]
-    except Exception as e:
-        raise RuntimeError(f"Apify actor start failed: {e}")
+    last_error = None
 
-    # Poll for completion (max 3 minutes)
-    log.info(f"[Apify] Run {run_id} started, waiting for completion...")
-    for _ in range(36):  # 36 * 5s = 180s
-        time.sleep(5)
+    for actor in DOWNLOAD_ACTORS:
+        actor_id = actor["id"]
+        actor_input = actor["input"](url)
+        log.info(f"[Apify] Trying actor {actor_id}")
+
         try:
-            status_resp = requests.get(
-                f"https://api.apify.com/v2/actor-runs/{run_id}",
-                headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
-                timeout=10,
+            # Use synchronous endpoint — waits for completion and returns results
+            resp = requests.post(
+                f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items",
+                headers={
+                    "Authorization": f"Bearer {APIFY_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                params={"timeout": 120},
+                json=actor_input,
+                timeout=150,
             )
-            status = status_resp.json()["data"]["status"]
-            if status == "SUCCEEDED":
-                break
-            if status in ("FAILED", "ABORTED", "TIMED-OUT"):
-                raise RuntimeError(f"Apify run {status}")
-        except RuntimeError:
-            raise
-        except Exception:
+            resp.raise_for_status()
+            items = resp.json()
+
+            if not items:
+                log.warning(f"[Apify] {actor_id} returned no results")
+                continue
+
+            item = items[0]
+            title = item.get("title", "Unknown")
+            duration = item.get("duration", 0)
+            log.info(f"[Apify] {actor_id} result keys: {list(item.keys())}")
+
+            download_url = _find_download_url(item)
+            if not download_url:
+                log.warning(f"[Apify] {actor_id}: no download URL found in result")
+                last_error = f"{actor_id}: no download URL in result"
+                continue
+
+            # Download the audio file
+            log.info(f"[Apify] Downloading file for '{title}' from {download_url[:80]}...")
+            audio_path = os.path.join(output_dir, "source_audio_raw.mp3")
+            audio_resp = requests.get(download_url, timeout=120, stream=True)
+            audio_resp.raise_for_status()
+            with open(audio_path, "wb") as f:
+                for chunk in audio_resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            file_size = os.path.getsize(audio_path)
+            if file_size < 1000:
+                log.warning(f"[Apify] File too small ({file_size} bytes), likely invalid")
+                last_error = f"{actor_id}: downloaded file too small ({file_size}B)"
+                continue
+
+            log.info(f"[Apify] Downloaded {file_size / 1024:.0f} KB: '{title}' ({duration}s)")
+            return {"raw_path": audio_path, "title": title, "duration": duration}
+
+        except Exception as e:
+            last_error = f"{actor_id}: {e}"
+            log.warning(f"[Apify] {actor_id} failed: {e}")
             continue
-    else:
-        raise RuntimeError("Apify run timed out (3 min)")
 
-    # Get results from dataset
-    try:
-        items_resp = requests.get(
-            f"https://api.apify.com/v2/datasets/{dataset_id}/items",
-            headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
-            timeout=30,
-        )
-        items_resp.raise_for_status()
-        items = items_resp.json()
-    except Exception as e:
-        raise RuntimeError(f"Apify dataset fetch failed: {e}")
-
-    if not items:
-        raise RuntimeError("Apify returned no results")
-
-    item = items[0]
-    title = item.get("title", "Unknown")
-    duration = item.get("duration", 0)
-
-    # Find the download URL for the audio file
-    download_url = item.get("url") or item.get("downloadUrl") or item.get("audioUrl")
-    if not download_url:
-        # Check nested structures
-        media = item.get("media") or item.get("files") or []
-        if isinstance(media, list) and media:
-            download_url = media[0].get("url") or media[0].get("link")
-
-    if not download_url:
-        log.error(f"[Apify] No download URL in result: {list(item.keys())}")
-        raise RuntimeError("Apify: no download URL in result")
-
-    # Download the audio file
-    log.info(f"[Apify] Downloading audio from URL for '{title}'")
-    audio_path = os.path.join(output_dir, "source_audio_raw.mp3")
-    try:
-        audio_resp = requests.get(download_url, timeout=120, stream=True)
-        audio_resp.raise_for_status()
-        with open(audio_path, "wb") as f:
-            for chunk in audio_resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-    except Exception as e:
-        raise RuntimeError(f"Apify audio download failed: {e}")
-
-    file_size = os.path.getsize(audio_path)
-    log.info(f"[Apify] Downloaded {file_size / 1024:.0f} KB audio: '{title}' ({duration}s)")
-
-    return {
-        "raw_path": audio_path,
-        "title": title,
-        "duration": duration,
-    }
+    raise RuntimeError(f"All Apify actors failed. Last error: {last_error}")
