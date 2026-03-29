@@ -97,7 +97,11 @@ def _validate_youtube_url(url: str) -> bool:
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "active_jobs": len(jobs)})
+    return jsonify({
+        "status": "ok",
+        "active_jobs": len(jobs),
+        "apify_token_env": bool(os.getenv("APIFY_TOKEN")),
+    })
 
 
 @app.route("/api/auth/google", methods=["POST"])
@@ -526,6 +530,7 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
 
         # ── Strategy 1: Try Apify transcript (fastest, cheapest, 99.95% reliable) ──
         _emit(job_id, "processing", "fetching_transcript", 5, step="download")
+        log.info(f"[Live Pipeline] Apify token present: {bool(apify_download.APIFY_TOKEN)}")
         segments = get_transcript(url)
         if segments:
             log.info(f"[Live Pipeline] Got transcript directly via Apify: {len(segments)} segments")
@@ -537,6 +542,8 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             _emit(job_id, "processing", "downloading_audio", 8, step="download")
 
             audio_info = None
+            apify_err = None
+
             # 2a: Try Apify audio download
             try:
                 audio_info_raw = apify_download_audio(url, job_temp)
@@ -555,6 +562,7 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
                 }
                 log.info("[Live Pipeline] Apify audio download succeeded")
             except Exception as e:
+                apify_err = str(e)
                 log.warning(f"[Live Pipeline] Apify audio download failed: {e}")
 
             # 2b: Fallback to yt-dlp
@@ -563,8 +571,9 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
                     audio_info = download_audio_only(url, job_temp, cookies_file=cookies_file)
                     log.info("[Live Pipeline] yt-dlp download succeeded")
                 except Exception as e2:
-                    log.error(f"[Live Pipeline] All download methods failed: {e2}")
-                    _emit(job_id, "error", f"影片下載失敗: {str(e2)[:200]}", 0)
+                    all_errors = f"Apify: {apify_err}\nyt-dlp/pytubefix: {str(e2)[:150]}"
+                    log.error(f"[Live Pipeline] All download methods failed:\n{all_errors}")
+                    _emit(job_id, "error", f"所有下載方式皆失敗:\n{all_errors}", 0)
                     return
 
             _emit(job_id, "processing", "downloaded", 15, step="download",
