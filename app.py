@@ -27,17 +27,11 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 log = logging.getLogger("pipeline")
 log.setLevel(logging.INFO)
-_fmt = logging.Formatter("%(asctime)s %(message)s")
-# Log to stdout so Zeabur runtime logs can capture output
-_sh = logging.StreamHandler(sys.stdout)
+_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+# Log to stderr so gunicorn and Zeabur runtime logs can capture output
+_sh = logging.StreamHandler(sys.stderr)
 _sh.setFormatter(_fmt)
 log.addHandler(_sh)
-# Also log to file for local debugging
-_fh = logging.FileHandler(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline.log")
-)
-_fh.setFormatter(_fmt)
-log.addHandler(_fh)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", os.urandom(24).hex())

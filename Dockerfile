@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Ensure Python output is sent straight to stdout/stderr without buffering
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install Python dependencies
@@ -24,4 +27,4 @@ RUN mkdir -p temp output
 
 EXPOSE 8080
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--timeout", "300", "--workers", "1", "--threads", "4"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--timeout", "300", "--workers", "1", "--threads", "4", "--access-logfile", "-", "--log-level", "info"]
