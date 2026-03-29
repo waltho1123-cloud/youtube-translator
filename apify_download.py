@@ -12,15 +12,11 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
 # Actor IDs
 TRANSCRIPT_ACTOR = "pintostudio~youtube-transcript-scraper"
 
-# Multiple download actors to try (different input formats)
+# Download actors with verified input formats
 DOWNLOAD_ACTORS = [
     {
-        "id": "streamers~youtube-video-downloader",
-        "input": lambda url: {"startUrls": [{"url": url}], "format": "mp3"},
-    },
-    {
-        "id": "philippe.trounev~youtube-video-audio-and-transcript-downloader-actor",
-        "input": lambda url: {"urls": [url], "format": "mp3"},
+        "id": "api-ninja~youtube-video-downloader",
+        "input": lambda url: {"urls": [url], "format": "mp3", "quality": "128kbps"},
     },
 ]
 
