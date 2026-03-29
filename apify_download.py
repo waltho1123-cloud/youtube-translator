@@ -117,10 +117,11 @@ def _find_download_url(item: dict) -> str:
     return ""
 
 
-def download_audio(url: str, output_dir: str) -> dict:
-    """Download YouTube audio via Apify actors.
+def download_audio(url: str, output_dir: str, on_progress=None) -> dict:
+    """Download YouTube audio via Apify actors (async with polling).
 
-    Tries multiple actors with their specific input formats.
+    Args:
+        on_progress: optional callback(message) called every few seconds to keep SSE alive
 
     Returns:
         dict with raw_path, title, duration
@@ -135,6 +136,10 @@ def download_audio(url: str, output_dir: str) -> dict:
     os.makedirs(output_dir, exist_ok=True)
 
     last_error = None
+    headers = {
+        "Authorization": f"Bearer {APIFY_TOKEN}",
+        "Content-Type": "application/json",
+    }
 
     for actor in DOWNLOAD_ACTORS:
         actor_id = actor["id"]
@@ -142,22 +147,54 @@ def download_audio(url: str, output_dir: str) -> dict:
         log.info(f"[Apify] Trying actor {actor_id}")
 
         try:
-            # Use synchronous endpoint — waits for completion and returns results
+            # Step 1: Start async run
             resp = requests.post(
-                f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items",
-                headers={
-                    "Authorization": f"Bearer {APIFY_TOKEN}",
-                    "Content-Type": "application/json",
-                },
-                params={"timeout": 120},
+                f"https://api.apify.com/v2/acts/{actor_id}/runs",
+                headers=headers,
                 json=actor_input,
-                timeout=150,
+                timeout=30,
             )
             resp.raise_for_status()
-            items = resp.json()
+            run_data = resp.json()["data"]
+            run_id = run_data["id"]
+            dataset_id = run_data["defaultDatasetId"]
+            log.info(f"[Apify] Run {run_id} started")
+
+            # Step 2: Poll for completion (max 3 min), emit progress to keep SSE alive
+            for i in range(36):  # 36 * 5s = 180s
+                time.sleep(5)
+                if on_progress and i % 2 == 0:
+                    on_progress(f"Apify 下載中... ({i * 5}s)")
+                try:
+                    status_resp = requests.get(
+                        f"https://api.apify.com/v2/actor-runs/{run_id}",
+                        headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
+                        timeout=10,
+                    )
+                    status = status_resp.json()["data"]["status"]
+                    if status == "SUCCEEDED":
+                        break
+                    if status in ("FAILED", "ABORTED", "TIMED-OUT"):
+                        raise RuntimeError(f"Apify run {status}")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    continue
+            else:
+                raise RuntimeError("Apify run timed out (3 min)")
+
+            # Step 3: Get results from dataset
+            items_resp = requests.get(
+                f"https://api.apify.com/v2/datasets/{dataset_id}/items",
+                headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
+                timeout=30,
+            )
+            items_resp.raise_for_status()
+            items = items_resp.json()
 
             if not items:
                 log.warning(f"[Apify] {actor_id} returned no results")
+                last_error = f"{actor_id}: no results"
                 continue
 
             item = items[0]
@@ -167,12 +204,14 @@ def download_audio(url: str, output_dir: str) -> dict:
 
             download_url = _find_download_url(item)
             if not download_url:
-                log.warning(f"[Apify] {actor_id}: no download URL found in result")
-                last_error = f"{actor_id}: no download URL in result"
+                log.warning(f"[Apify] {actor_id}: no download URL in result")
+                last_error = f"{actor_id}: no download URL"
                 continue
 
-            # Download the audio file
-            log.info(f"[Apify] Downloading file for '{title}' from {download_url[:80]}...")
+            # Step 4: Download the audio file
+            if on_progress:
+                on_progress("下載音訊檔案中...")
+            log.info(f"[Apify] Downloading file for '{title}'")
             audio_path = os.path.join(output_dir, "source_audio_raw.mp3")
             audio_resp = requests.get(download_url, timeout=120, stream=True)
             audio_resp.raise_for_status()
@@ -182,8 +221,7 @@ def download_audio(url: str, output_dir: str) -> dict:
 
             file_size = os.path.getsize(audio_path)
             if file_size < 1000:
-                log.warning(f"[Apify] File too small ({file_size} bytes), likely invalid")
-                last_error = f"{actor_id}: downloaded file too small ({file_size}B)"
+                last_error = f"{actor_id}: file too small ({file_size}B)"
                 continue
 
             log.info(f"[Apify] Downloaded {file_size / 1024:.0f} KB: '{title}' ({duration}s)")
@@ -194,4 +232,4 @@ def download_audio(url: str, output_dir: str) -> dict:
             log.warning(f"[Apify] {actor_id} failed: {e}")
             continue
 
-    raise RuntimeError(f"All Apify actors failed. Last error: {last_error}")
+    raise RuntimeError(f"Apify download failed: {last_error}")

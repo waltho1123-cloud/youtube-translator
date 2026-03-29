@@ -332,14 +332,14 @@ def progress(job_id):
         heartbeat_count = 0
         while True:
             try:
-                event = job["events"].get(timeout=60)
+                event = job["events"].get(timeout=15)
                 heartbeat_count = 0
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                 if event.get("status") in ("completed", "error"):
                     break
             except queue.Empty:
                 heartbeat_count += 1
-                if heartbeat_count > 30:
+                if heartbeat_count > 120:  # 120 * 15s = 30 min
                     yield f"data: {json.dumps({'status': 'error', 'message': '連線逾時（30 分鐘無進度）'})}\n\n"
                     break
                 yield f"data: {json.dumps({'status': 'heartbeat'})}\n\n"
@@ -546,7 +546,10 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
 
             # 2a: Try Apify audio download
             try:
-                audio_info_raw = apify_download_audio(url, job_temp)
+                def _apify_progress(msg):
+                    _emit(job_id, "processing", msg, 10, step="download")
+
+                audio_info_raw = apify_download_audio(url, job_temp, on_progress=_apify_progress)
                 # Convert to WAV for Whisper
                 import subprocess
                 wav_path = os.path.join(job_temp, "source_audio.wav")
