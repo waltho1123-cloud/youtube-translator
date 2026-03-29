@@ -30,14 +30,17 @@ def init_db():
         openai_key TEXT DEFAULT '',
         minimax_key TEXT DEFAULT '',
         minimax_group TEXT DEFAULT '',
-        youtube_cookies TEXT DEFAULT ''
+        youtube_cookies TEXT DEFAULT '',
+        apify_token TEXT DEFAULT ''
     )''')
-    # Migration: add youtube_cookies column if missing
+    # Migration: add new columns if missing
     try:
         cursor = conn.execute("PRAGMA table_info(users)")
         columns = [row['name'] for row in cursor.fetchall()]
         if 'youtube_cookies' not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN youtube_cookies TEXT DEFAULT ''")
+        if 'apify_token' not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN apify_token TEXT DEFAULT ''")
     except Exception:
         pass
     conn.commit()
@@ -82,7 +85,7 @@ def get_user_by_id(user_id):
     return dict(row) if row else None
 
 
-def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=None):
+def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=None, apify_token=None):
     conn = get_db()
     if openai_key is not None:
         conn.execute(
@@ -95,6 +98,10 @@ def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=N
     if minimax_group is not None:
         conn.execute(
             "UPDATE users SET minimax_group = ? WHERE id = ?", (minimax_group, user_id)
+        )
+    if apify_token is not None:
+        conn.execute(
+            "UPDATE users SET apify_token = ? WHERE id = ?", (apify_token, user_id)
         )
     conn.commit()
     conn.close()
@@ -112,7 +119,7 @@ def update_youtube_cookies(user_id, cookies):
 def get_user_keys(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT openai_key, minimax_key, minimax_group, youtube_cookies FROM users WHERE id = ?",
+        "SELECT openai_key, minimax_key, minimax_group, youtube_cookies, apify_token FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     conn.close()

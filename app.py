@@ -156,6 +156,7 @@ def get_keys():
         "openai": bool(keys.get("openai_key")),
         "minimax": bool(keys.get("minimax_key")),
         "youtube_cookies": bool(keys.get("youtube_cookies")),
+        "apify": bool(keys.get("apify_token") or os.getenv("APIFY_TOKEN")),
     })
 
 
@@ -168,11 +169,13 @@ def set_keys():
     openai_key = data.get("openai_key", "").strip()
     minimax_key = data.get("minimax_key", "").strip()
     minimax_group = data.get("minimax_group", "").strip()
+    apify_token = data.get("apify_token", "").strip()
     db.update_user_keys(
         current_user.id,
         openai_key=openai_key if openai_key else None,
         minimax_key=minimax_key if minimax_key else None,
         minimax_group=minimax_group if minimax_group else None,
+        apify_token=apify_token if apify_token else None,
     )
     return jsonify({"ok": True})
 
@@ -202,6 +205,7 @@ def start_translate():
     minimax_key = keys.get("minimax_key", "")
     minimax_group = keys.get("minimax_group", "")
     youtube_cookies = keys.get("youtube_cookies", "")
+    apify_token = keys.get("apify_token", "") or os.getenv("APIFY_TOKEN", "")
     if not openai_key or not minimax_key:
         return jsonify({"error": "請先在設定中填寫 API Key"}), 400
 
@@ -238,7 +242,7 @@ def start_translate():
     thread = threading.Thread(
         target=_run_pipeline,
         args=(job_id, url, voice, volume, model, subtitle, quality, eng_subtitle, keep_bg,
-              openai_key, minimax_key, minimax_group, youtube_cookies),
+              openai_key, minimax_key, minimax_group, youtube_cookies, apify_token),
         daemon=True,
     )
     thread.start()
@@ -256,6 +260,7 @@ def start_live_translate():
     minimax_key = keys.get("minimax_key", "")
     minimax_group = keys.get("minimax_group", "")
     youtube_cookies = keys.get("youtube_cookies", "")
+    apify_token = keys.get("apify_token", "") or os.getenv("APIFY_TOKEN", "")
     if not openai_key or not minimax_key:
         return jsonify({"error": "請先在設定中填寫 API Key"}), 400
 
@@ -283,7 +288,7 @@ def start_live_translate():
     thread = threading.Thread(
         target=_run_live_pipeline,
         args=(job_id, url, model, voice, keep_bg,
-              openai_key, minimax_key, minimax_group, youtube_cookies),
+              openai_key, minimax_key, minimax_group, youtube_cookies, apify_token),
         daemon=True,
     )
     thread.start()
@@ -363,7 +368,7 @@ def _emit(job_id, status, message, progress=0, **kwargs):
 
 
 def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="720", eng_subtitle=False, keep_bg=False,
-                   openai_key="", minimax_key="", minimax_group="", youtube_cookies=""):
+                   openai_key="", minimax_key="", minimax_group="", youtube_cookies="", apify_token=""):
     """Run the full translation pipeline in a background thread."""
     job_temp = os.path.join(TEMP_DIR, job_id)
     cookies_file = None
@@ -490,7 +495,7 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
 
 
 def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
-                       openai_key="", minimax_key="", minimax_group="", youtube_cookies=""):
+                       openai_key="", minimax_key="", minimax_group="", youtube_cookies="", apify_token=""):
     """Run live voice translation pipeline: audio -> transcribe -> translate -> TTS."""
     job_temp = os.path.join(TEMP_DIR, job_id)
     cookies_file = None
@@ -501,7 +506,11 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
         from translator import translate_segments
         from tts_engine import generate_tts_batch
         from separator import separate_vocals
+        import apify_download
         from apify_download import get_transcript, download_audio as apify_download_audio
+        # Use per-user token if set, otherwise module uses env var
+        if apify_token:
+            apify_download.APIFY_TOKEN = apify_token
 
         if not openai_key or not minimax_key:
             _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")

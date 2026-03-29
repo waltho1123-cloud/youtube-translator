@@ -154,6 +154,20 @@
                        class="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
                               placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
             </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Apify API Token <span class="text-gray-500">(用於下載 YouTube 影片)</span></label>
+                <div class="flex items-center gap-2">
+                    <input id="apifyTokenInput" type="password" placeholder="apify_api_..."
+                           class="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white
+                                  placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    <button type="button" onclick="toggleKeyVisibility('apifyTokenInput', this)"
+                            class="p-2 text-gray-400 hover:text-white flex-shrink-0">
+                        <svg class="w-5 h-5 eye-off" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"/></svg>
+                        <svg class="w-5 h-5 eye-on hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    </button>
+                </div>
+                <p id="apifyKeyStatus" class="text-xs mt-1 text-gray-500"></p>
+            </div>
             <!-- YouTube Cookies -->
             <div class="border-t border-slate-600 pt-4">
                 <button onclick="document.getElementById('cookiesSection').classList.toggle('hidden')"
@@ -999,10 +1013,14 @@ async function loadKeyStatus() {
             data.minimax ? '已設定' : '未設定';
         document.getElementById('minimaxKeyStatus').className =
             'text-xs mt-1 ' + (data.minimax ? 'text-green-400' : 'text-red-400');
+        document.getElementById('apifyKeyStatus').textContent =
+            data.apify ? '已設定' : '未設定';
+        document.getElementById('apifyKeyStatus').className =
+            'text-xs mt-1 ' + (data.apify ? 'text-green-400' : 'text-red-400');
         document.getElementById('cookiesStatus').textContent =
-            data.youtube_cookies ? '(已設定)' : '(未設定 - 可能無法下載)';
+            data.youtube_cookies ? '(已設定)' : '(未設定)';
         document.getElementById('cookiesStatus').className =
-            'text-xs ' + (data.youtube_cookies ? 'text-green-400' : 'text-yellow-400');
+            'text-xs ' + (data.youtube_cookies ? 'text-green-400' : 'text-gray-500');
     } catch (e) {}
 }
 
@@ -1010,10 +1028,11 @@ async function saveKeys() {
     const openaiKey = document.getElementById('openaiKeyInput').value.trim();
     const minimaxKey = document.getElementById('minimaxKeyInput').value.trim();
     const minimaxGroup = document.getElementById('minimaxGroupInput').value.trim();
+    const apifyToken = document.getElementById('apifyTokenInput').value.trim();
     const cookiesText = document.getElementById('cookiesInput').value.trim();
     const modal = document.getElementById('settingsModal');
 
-    if (!openaiKey && !minimaxKey && !minimaxGroup && !cookiesText) {
+    if (!openaiKey && !minimaxKey && !minimaxGroup && !apifyToken && !cookiesText) {
         modal.classList.remove('active');
         return;
     }
@@ -1022,11 +1041,11 @@ async function saveKeys() {
     try {
         // Save API keys
         const promises = [];
-        if (openaiKey || minimaxKey || minimaxGroup) {
+        if (openaiKey || minimaxKey || minimaxGroup || apifyToken) {
             promises.push(fetch('/api/keys', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ openai_key: openaiKey, minimax_key: minimaxKey, minimax_group: minimaxGroup }),
+                body: JSON.stringify({ openai_key: openaiKey, minimax_key: minimaxKey, minimax_group: minimaxGroup, apify_token: apifyToken }),
             }));
         }
         // Save YouTube cookies
@@ -1043,6 +1062,7 @@ async function saveKeys() {
             document.getElementById('openaiKeyInput').value = '';
             document.getElementById('minimaxKeyInput').value = '';
             document.getElementById('minimaxGroupInput').value = '';
+            document.getElementById('apifyTokenInput').value = '';
             document.getElementById('cookiesInput').value = '';
             msgEl.textContent = '設定已儲存';
             msgEl.className = 'text-center text-sm text-green-400';
