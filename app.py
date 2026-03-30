@@ -582,21 +582,29 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
             _emit(job_id, "processing", "downloaded", 15, step="download",
                   title=audio_info.get("title", ""), duration=audio_info.get("duration", 0))
 
-            # Separate vocals if keep_bg enabled
+            # Separate vocals if keep_bg enabled (use cloud API to avoid OOM)
             if keep_bg:
-                from separator import is_available as demucs_available
-                if not demucs_available():
+                import cloud_separator
+                if not cloud_separator.is_available():
                     _emit(job_id, "processing", "skip_separate", 18, step="separate")
+                    log.warning("[Live Pipeline] REPLICATE_TOKEN not set, skipping separation")
                 else:
                     _emit(job_id, "processing", "separating", 15, step="separate")
-                    separated = separate_vocals(audio_info["audio_path"], job_temp)
-                    tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
-                    os.makedirs(tts_dir, exist_ok=True)
-                    import shutil as _shutil
-                    bg_dest = os.path.join(tts_dir, "accompaniment.wav")
-                    _shutil.copy2(separated["accompaniment"], bg_dest)
-                    accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
-                    _emit(job_id, "processing", "separated", 18, step="separate")
+                    try:
+                        def _sep_progress(msg):
+                            _emit(job_id, "processing", msg, 16, step="separate")
+                        separated = cloud_separator.separate_vocals(
+                            audio_info["audio_path"], job_temp, on_progress=_sep_progress)
+                        tts_dir = os.path.join(TEMP_DIR, f"live_{job_id}", "tts")
+                        os.makedirs(tts_dir, exist_ok=True)
+                        import shutil as _shutil
+                        bg_dest = os.path.join(tts_dir, "accompaniment.wav")
+                        _shutil.copy2(separated["accompaniment"], bg_dest)
+                        accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
+                        _emit(job_id, "processing", "separated", 18, step="separate")
+                    except Exception as e:
+                        log.warning(f"[Live Pipeline] Cloud separation failed: {e}, continuing without")
+                        _emit(job_id, "processing", "skip_separate", 18, step="separate")
 
             # Transcribe with Whisper
             _emit(job_id, "processing", "transcribing", 18, step="transcribe")
