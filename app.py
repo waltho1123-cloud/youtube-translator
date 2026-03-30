@@ -387,7 +387,8 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         from translator import translate_segments
         from tts_engine import generate_tts_batch
         from composer import compose_video
-        from separator import separate_vocals
+        import apify_download
+        import cloud_separator as _cloud_sep
 
         if not openai_key or not minimax_key:
             _emit(job_id, "error", "API keys not configured (OpenAI + MiniMax)")
@@ -395,32 +396,67 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
 
         client = OpenAI(api_key=openai_key)
         cookies_file = write_cookies_file(youtube_cookies, job_temp) if youtube_cookies else None
+        if apify_token:
+            apify_download.APIFY_TOKEN = apify_token
+        if replicate_token:
+            _cloud_sep.REPLICATE_TOKEN = replicate_token
 
-        # Use per-job temp directory to avoid concurrent conflicts
         os.makedirs(job_temp, exist_ok=True)
 
-        # Step 1: Download
+        # Step 1: Download video — Apify first, yt-dlp fallback
         _emit(job_id, "processing", "downloading", 5, step="download")
-        video_info = download_video(url, job_temp, quality=quality, cookies_file=cookies_file)
-        _emit(
-            job_id, "processing", "downloaded", 18,
-            step="download",
-            title=video_info["title"],
-            duration=video_info["duration"],
-        )
+        video_info = None
 
-        # Step 1.5: Separate vocals if keep_bg enabled
+        # 1a: Try Apify video download
+        try:
+            def _dl_progress(msg):
+                _emit(job_id, "processing", msg, 8, step="download")
+            apify_result = apify_download.download_video(url, job_temp, quality=quality, on_progress=_dl_progress)
+            # Extract audio from downloaded video
+            import subprocess as _sp
+            audio_path = os.path.join(job_temp, "source_audio.wav")
+            _sp.run(["ffmpeg", "-y", "-i", apify_result["raw_path"],
+                     "-vn", "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le", audio_path],
+                    capture_output=True, check=True, timeout=300)
+            video_info = {
+                "video_path": apify_result["raw_path"],
+                "audio_path": audio_path,
+                "title": apify_result["title"],
+                "duration": apify_result["duration"],
+            }
+            log.info("[Pipeline] Apify video download succeeded")
+        except Exception as e:
+            log.warning(f"[Pipeline] Apify video download failed: {e}")
+
+        # 1b: Fallback to yt-dlp
+        if not video_info:
+            try:
+                video_info = download_video(url, job_temp, quality=quality, cookies_file=cookies_file)
+                log.info("[Pipeline] yt-dlp video download succeeded")
+            except Exception as e2:
+                _emit(job_id, "error", f"影片下載失敗: {str(e2)[:200]}", 0)
+                return
+
+        _emit(job_id, "processing", "downloaded", 18, step="download",
+              title=video_info["title"], duration=video_info["duration"])
+
+        # Step 1.5: Separate vocals if keep_bg enabled (cloud API)
         accompaniment_path = None
         if keep_bg:
-            from separator import is_available as demucs_available
-            if not demucs_available():
+            if not _cloud_sep.is_available():
                 _emit(job_id, "processing", "skip_separate", 22, step="separate")
-                log.warning("[Pipeline] Demucs not installed, skipping background music separation")
             else:
                 _emit(job_id, "processing", "separating", 18, step="separate")
-                separated = separate_vocals(video_info["audio_path"], job_temp)
-                accompaniment_path = separated["accompaniment"]
-                _emit(job_id, "processing", "separated", 22, step="separate")
+                try:
+                    def _sep_progress(msg):
+                        _emit(job_id, "processing", msg, 20, step="separate")
+                    separated = _cloud_sep.separate_vocals(
+                        video_info["audio_path"], job_temp, on_progress=_sep_progress)
+                    accompaniment_path = separated["accompaniment"]
+                    _emit(job_id, "processing", "separated", 22, step="separate")
+                except Exception as e:
+                    log.warning(f"[Pipeline] Cloud separation failed: {e}")
+                    _emit(job_id, "processing", "skip_separate", 22, step="separate")
 
         # Step 2: Transcribe
         _emit(job_id, "processing", "transcribing", 22, step="transcribe")

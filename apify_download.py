@@ -13,10 +13,17 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
 TRANSCRIPT_ACTOR = "pintostudio~youtube-transcript-scraper"
 
 # Download actors with verified input formats
-DOWNLOAD_ACTORS = [
+AUDIO_ACTORS = [
     {
         "id": "api-ninja~youtube-video-downloader",
         "input": lambda url: {"urls": [url], "format": "mp3", "quality": "128kbps"},
+    },
+]
+
+VIDEO_ACTORS = [
+    {
+        "id": "api-ninja~youtube-video-downloader",
+        "input": lambda url, q: {"urls": [url], "format": "mp4", "quality": f"{q}p"},
     },
 ]
 
@@ -233,3 +240,105 @@ def download_audio(url: str, output_dir: str, on_progress=None) -> dict:
             continue
 
     raise RuntimeError(f"Apify download failed: {last_error}")
+
+
+def download_video(url: str, output_dir: str, quality: str = "720", on_progress=None) -> dict:
+    """Download YouTube video (MP4) via Apify.
+
+    Returns:
+        dict with raw_path, title, duration
+    """
+    if not APIFY_TOKEN:
+        raise RuntimeError("APIFY_TOKEN not configured")
+
+    video_id = _extract_video_id(url)
+    log.info(f"[Apify] Downloading video for {video_id} (quality={quality})")
+    os.makedirs(output_dir, exist_ok=True)
+
+    headers = {
+        "Authorization": f"Bearer {APIFY_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    last_error = None
+
+    for actor in VIDEO_ACTORS:
+        actor_id = actor["id"]
+        actor_input = actor["input"](url, quality)
+        log.info(f"[Apify] Trying video actor {actor_id}")
+
+        try:
+            resp = requests.post(
+                f"https://api.apify.com/v2/acts/{actor_id}/runs",
+                headers=headers,
+                json=actor_input,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            run_data = resp.json()["data"]
+            run_id = run_data["id"]
+            dataset_id = run_data["defaultDatasetId"]
+
+            for i in range(60):  # 5 min max
+                time.sleep(5)
+                if on_progress and i % 2 == 0:
+                    on_progress(f"Apify 影片下載中... ({i * 5}s)")
+                try:
+                    sr = requests.get(
+                        f"https://api.apify.com/v2/actor-runs/{run_id}",
+                        headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
+                        timeout=10,
+                    )
+                    status = sr.json()["data"]["status"]
+                    if status == "SUCCEEDED":
+                        break
+                    if status in ("FAILED", "ABORTED", "TIMED-OUT"):
+                        raise RuntimeError(f"Apify run {status}")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    continue
+            else:
+                raise RuntimeError("Apify run timed out")
+
+            items_resp = requests.get(
+                f"https://api.apify.com/v2/datasets/{dataset_id}/items",
+                headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
+                timeout=30,
+            )
+            items_resp.raise_for_status()
+            items = items_resp.json()
+            if not items:
+                last_error = f"{actor_id}: no results"
+                continue
+
+            item = items[0]
+            title = item.get("title", "Unknown")
+            duration = item.get("duration", 0)
+            download_url = _find_download_url(item)
+            if not download_url:
+                last_error = f"{actor_id}: no download URL"
+                continue
+
+            if on_progress:
+                on_progress("下載影片檔案中...")
+            video_path = os.path.join(output_dir, "source_video.mp4")
+            vr = requests.get(download_url, timeout=300, stream=True)
+            vr.raise_for_status()
+            with open(video_path, "wb") as f:
+                for chunk in vr.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            file_size = os.path.getsize(video_path)
+            if file_size < 10000:
+                last_error = f"{actor_id}: file too small ({file_size}B)"
+                continue
+
+            log.info(f"[Apify] Video downloaded {file_size / 1024 / 1024:.1f} MB: '{title}'")
+            return {"raw_path": video_path, "title": title, "duration": duration}
+
+        except Exception as e:
+            last_error = f"{actor_id}: {e}"
+            log.warning(f"[Apify] {actor_id} video failed: {e}")
+            continue
+
+    raise RuntimeError(f"Apify video download failed: {last_error}")
