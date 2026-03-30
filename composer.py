@@ -130,7 +130,7 @@ def compose_video(
     sub_filters = []
     if burn_any:
         if subtitle:
-            margin_v_zh = 80 if eng_subtitle else 30
+            margin_v_zh = 50 if eng_subtitle else 25
             escaped_zh = zh_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_zh}':force_style="

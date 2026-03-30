@@ -7,7 +7,7 @@ import time
 log = logging.getLogger("pipeline")
 
 REPLICATE_TOKEN = os.getenv("REPLICATE_TOKEN", "")
-DEMUCS_VERSION = "25a173108cff36ef9f80f854c162d01df9e6528be175794b81571db22a44d927"
+DEMUCS_VERSION = "25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953"
 API_BASE = "https://api.replicate.com/v1"
 
 
