@@ -23,7 +23,7 @@ AUDIO_ACTORS = [
 VIDEO_ACTORS = [
     {
         "id": "api-ninja~youtube-video-downloader",
-        "input": lambda url, q: {"urls": [url], "format": "mp4", "quality": f"{q}p"},
+        "input": lambda url, q: {"urls": [url], "format": q},  # format: "720", "1080", etc.
     },
 ]
 
