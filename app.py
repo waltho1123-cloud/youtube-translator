@@ -459,7 +459,7 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
                     _emit(job_id, "processing", "separated", 22, step="separate")
                 except Exception as e:
                     log.warning(f"[Pipeline] Cloud separation failed: {e}")
-                    _emit(job_id, "processing", "skip_separate", 22, step="separate")
+                    _emit(job_id, "processing", f"音源分離失敗: {str(e)[:100]}，繼續不保留背景音樂", 22, step="separate")
 
         # Step 2: Transcribe
         _emit(job_id, "processing", "transcribing", 22, step="transcribe")
@@ -649,8 +649,8 @@ def _run_live_pipeline(job_id, url, model, voice, keep_bg=False,
                         accompaniment_url = f"/tts/{job_id}/accompaniment.wav"
                         _emit(job_id, "processing", "separated", 18, step="separate")
                     except Exception as e:
-                        log.warning(f"[Live Pipeline] Cloud separation failed: {e}, continuing without")
-                        _emit(job_id, "processing", "skip_separate", 18, step="separate")
+                        log.warning(f"[Live Pipeline] Cloud separation failed: {e}")
+                        _emit(job_id, "processing", f"音源分離失敗: {str(e)[:100]}，繼續不保留背景音樂", 18, step="separate")
 
             # Transcribe with Whisper
             _emit(job_id, "processing", "transcribing", 18, step="transcribe")

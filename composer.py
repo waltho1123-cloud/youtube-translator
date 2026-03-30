@@ -130,19 +130,19 @@ def compose_video(
     sub_filters = []
     if burn_any:
         if subtitle:
-            margin_v_zh = 50 if eng_subtitle else 25
+            margin_v_zh = 80 if eng_subtitle else 30
             escaped_zh = zh_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_zh}':force_style="
-                f"'FontSize=24,FontName=Noto Sans CJK TC,PrimaryColour=&H00FFFFFF,"
+                f"'FontSize=22,FontName=Noto Sans CJK TC,PrimaryColour=&H00FFFFFF,"
                 f"OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV={margin_v_zh}'"
             )
         if eng_subtitle:
             escaped_en = en_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_en}':force_style="
-                f"'FontSize=20,FontName=Arial,PrimaryColour=&H00CCCCCC,"
-                f"OutlineColour=&H00000000,Outline=1,Shadow=1,MarginV=25'"
+                f"'FontSize=18,FontName=Arial,PrimaryColour=&H00CCCCCC,"
+                f"OutlineColour=&H00000000,Outline=1,Shadow=1,MarginV=20'"
             )
 
     # Audio filter
