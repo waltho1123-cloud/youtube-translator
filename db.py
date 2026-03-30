@@ -41,6 +41,8 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN youtube_cookies TEXT DEFAULT ''")
         if 'apify_token' not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN apify_token TEXT DEFAULT ''")
+        if 'replicate_token' not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN replicate_token TEXT DEFAULT ''")
     except Exception:
         pass
     conn.commit()
@@ -85,24 +87,14 @@ def get_user_by_id(user_id):
     return dict(row) if row else None
 
 
-def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=None, apify_token=None):
+def update_user_keys(user_id, openai_key=None, minimax_key=None, minimax_group=None,
+                     apify_token=None, replicate_token=None):
     conn = get_db()
-    if openai_key is not None:
-        conn.execute(
-            "UPDATE users SET openai_key = ? WHERE id = ?", (openai_key, user_id)
-        )
-    if minimax_key is not None:
-        conn.execute(
-            "UPDATE users SET minimax_key = ? WHERE id = ?", (minimax_key, user_id)
-        )
-    if minimax_group is not None:
-        conn.execute(
-            "UPDATE users SET minimax_group = ? WHERE id = ?", (minimax_group, user_id)
-        )
-    if apify_token is not None:
-        conn.execute(
-            "UPDATE users SET apify_token = ? WHERE id = ?", (apify_token, user_id)
-        )
+    for col, val in [("openai_key", openai_key), ("minimax_key", minimax_key),
+                     ("minimax_group", minimax_group), ("apify_token", apify_token),
+                     ("replicate_token", replicate_token)]:
+        if val is not None:
+            conn.execute(f"UPDATE users SET {col} = ? WHERE id = ?", (val, user_id))
     conn.commit()
     conn.close()
 
@@ -119,7 +111,7 @@ def update_youtube_cookies(user_id, cookies):
 def get_user_keys(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT openai_key, minimax_key, minimax_group, youtube_cookies, apify_token FROM users WHERE id = ?",
+        "SELECT openai_key, minimax_key, minimax_group, youtube_cookies, apify_token, replicate_token FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     conn.close()
