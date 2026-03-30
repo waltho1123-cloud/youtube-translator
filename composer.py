@@ -177,7 +177,8 @@ def compose_video(
             "-filter_complex", filter_complex,
             "-map", v_map, "-map", a_map,
             "-c:v", "libx264" if needs_reencode else "copy",
-            "-preset", "fast", "-crf", "23",
+            "-preset", "ultrafast", "-crf", "26",
+            "-threads", "2",
             "-c:a", "aac", "-b:a", "192k",
             "-shortest", output_path,
         ]
