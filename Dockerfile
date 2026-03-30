@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir demucs>=4.0.0
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p temp output
+RUN mkdir -p temp output /data
 
 EXPOSE 8080
 
