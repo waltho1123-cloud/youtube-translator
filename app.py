@@ -406,6 +406,7 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
         # Step 1: Download video — Apify first, yt-dlp fallback
         _emit(job_id, "processing", "downloading", 5, step="download")
         video_info = None
+        apify_video_err = "skipped"
 
         # 1a: Try Apify video download
         try:
@@ -426,6 +427,7 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
             }
             log.info("[Pipeline] Apify video download succeeded")
         except Exception as e:
+            apify_video_err = str(e)
             log.warning(f"[Pipeline] Apify video download failed: {e}")
 
         # 1b: Fallback to yt-dlp
@@ -434,7 +436,8 @@ def _run_pipeline(job_id, url, voice, volume, model, subtitle=False, quality="72
                 video_info = download_video(url, job_temp, quality=quality, cookies_file=cookies_file)
                 log.info("[Pipeline] yt-dlp video download succeeded")
             except Exception as e2:
-                _emit(job_id, "error", f"影片下載失敗: {str(e2)[:200]}", 0)
+                all_err = f"Apify: {apify_video_err}\nyt-dlp: {str(e2)[:150]}"
+                _emit(job_id, "error", f"所有下載方式皆失敗:\n{all_err}", 0)
                 return
 
         _emit(job_id, "processing", "downloaded", 18, step="download",
