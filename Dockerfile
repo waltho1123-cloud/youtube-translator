@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     nodejs \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure Python output is sent straight to stdout/stderr without buffering

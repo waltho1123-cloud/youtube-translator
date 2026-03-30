@@ -134,7 +134,7 @@ def compose_video(
             escaped_zh = zh_srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             sub_filters.append(
                 f"subtitles='{escaped_zh}':force_style="
-                f"'FontSize=24,FontName=PingFang SC,PrimaryColour=&H00FFFFFF,"
+                f"'FontSize=24,FontName=Noto Sans CJK TC,PrimaryColour=&H00FFFFFF,"
                 f"OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV={margin_v_zh}'"
             )
         if eng_subtitle:
