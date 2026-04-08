@@ -148,7 +148,7 @@ def download_audio(url: str, output_dir: str, on_progress=None) -> dict:
         "Content-Type": "application/json",
     }
 
-    for actor in DOWNLOAD_ACTORS:
+    for actor in AUDIO_ACTORS:
         actor_id = actor["id"]
         actor_input = actor["input"](url)
         log.info(f"[Apify] Trying actor {actor_id}")
