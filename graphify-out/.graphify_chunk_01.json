@@ -1,0 +1,894 @@
+{
+  "nodes": [
+    {
+      "id": "app_flask_app",
+      "label": "Flask Web Application",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "app_run_pipeline",
+      "label": "Video Translation Pipeline (Full)",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "line 378",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "app_run_live_pipeline",
+      "label": "Live Voice Translation Pipeline",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "line 544",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "app_user_class",
+      "label": "Flask-Login User Model",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "line 43",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "app_google_login",
+      "label": "Google OAuth Login Endpoint",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "line 107",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "app_sse_progress",
+      "label": "SSE Progress Streaming Endpoint",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "line 326",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "main_cli",
+      "label": "CLI Entry Point (main.py)",
+      "file_type": "code",
+      "source_file": "main.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "downloader_download_video",
+      "label": "YouTube Video Downloader (yt-dlp + pytubefix)",
+      "file_type": "code",
+      "source_file": "downloader.py",
+      "source_location": "line 321",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "downloader_download_audio_only",
+      "label": "YouTube Audio-Only Downloader",
+      "file_type": "code",
+      "source_file": "downloader.py",
+      "source_location": "line 126",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "downloader_write_cookies_file",
+      "label": "YouTube Cookies File Writer",
+      "file_type": "code",
+      "source_file": "downloader.py",
+      "source_location": "line 11",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "downloader_ytdlp_fallback",
+      "label": "yt-dlp Multi-Client Retry Strategy",
+      "file_type": "code",
+      "source_file": "downloader.py",
+      "source_location": "line 33",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "apify_download_module",
+      "label": "Apify Cloud Download Module",
+      "file_type": "code",
+      "source_file": "apify_download.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "apify_download_get_transcript",
+      "label": "Apify YouTube Transcript Fetcher",
+      "file_type": "code",
+      "source_file": "apify_download.py",
+      "source_location": "line 37",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "apify_download_audio",
+      "label": "Apify Audio Download (Async Polling)",
+      "file_type": "code",
+      "source_file": "apify_download.py",
+      "source_location": "line 127",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "apify_download_video",
+      "label": "Apify Video Download",
+      "file_type": "code",
+      "source_file": "apify_download.py",
+      "source_location": "line 245",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "transcriber_transcribe",
+      "label": "Whisper API Transcriber",
+      "file_type": "code",
+      "source_file": "transcriber.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "transcriber_large_file_split",
+      "label": "Large Audio File Chunked Transcription",
+      "file_type": "code",
+      "source_file": "transcriber.py",
+      "source_location": "line 54",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "translator_translate_segments",
+      "label": "GPT Translation (EN to ZH-TW)",
+      "file_type": "code",
+      "source_file": "translator.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "translator_system_prompt",
+      "label": "Translation System Prompt (Interpreter Role)",
+      "file_type": "code",
+      "source_file": "translator.py",
+      "source_location": "line 9",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tts_engine_generate_tts_batch",
+      "label": "MiniMax TTS Batch Generator",
+      "file_type": "code",
+      "source_file": "tts_engine.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tts_engine_speed_adjust",
+      "label": "TTS Speed Adjustment (ffmpeg atempo)",
+      "file_type": "code",
+      "source_file": "tts_engine.py",
+      "source_location": "line 30",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tts_engine_voice_presets",
+      "label": "MiniMax Voice Presets Configuration",
+      "file_type": "code",
+      "source_file": "tts_engine.py",
+      "source_location": "line 12",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "composer_compose_video",
+      "label": "Video Composer (Audio Overlay + Subtitles)",
+      "file_type": "code",
+      "source_file": "composer.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "composer_srt_generator",
+      "label": "SRT Subtitle Generator",
+      "file_type": "code",
+      "source_file": "composer.py",
+      "source_location": "line 27",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "separator_separate_vocals",
+      "label": "Local Demucs Vocal Separator",
+      "file_type": "code",
+      "source_file": "separator.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "cloud_separator_separate_vocals",
+      "label": "Cloud Demucs Separator (Replicate API)",
+      "file_type": "code",
+      "source_file": "cloud_separator.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_module",
+      "label": "SQLite User Database",
+      "file_type": "code",
+      "source_file": "db.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_user_keys",
+      "label": "Per-User API Key Storage",
+      "file_type": "code",
+      "source_file": "db.py",
+      "source_location": "line 93",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_google_user",
+      "label": "Google OAuth User Upsert",
+      "file_type": "code",
+      "source_file": "db.py",
+      "source_location": "line 55",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "requirements_deps",
+      "label": "Python Dependencies",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "segment_data_format",
+      "label": "Segment Data Structure (start/end/text/translated/tts_path)",
+      "file_type": "code",
+      "source_file": "transcriber.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "app_run_pipeline",
+      "target": "downloader_download_video",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 436",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "apify_download_video",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 415",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "transcriber_transcribe",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 466",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "translator_translate_segments",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 481",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "tts_engine_generate_tts_batch",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 501",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "composer_compose_video",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 524",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "cloud_separator_separate_vocals",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 456",
+      "weight": 0.8
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "downloader_write_cookies_file",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 398",
+      "weight": 0.5
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "apify_download_get_transcript",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 581",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "apify_download_audio",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 598",
+      "weight": 0.8
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "downloader_download_audio_only",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 620",
+      "weight": 0.7
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "transcriber_transcribe",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 658",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "translator_translate_segments",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 680",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "tts_engine_generate_tts_batch",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 701",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "cloud_separator_separate_vocals",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 642",
+      "weight": 0.8
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "separator_separate_vocals",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 555",
+      "weight": 0.3
+    },
+    {
+      "source": "app_google_login",
+      "target": "db_google_user",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 123",
+      "weight": 1.0
+    },
+    {
+      "source": "app_flask_app",
+      "target": "db_module",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 60",
+      "weight": 1.0
+    },
+    {
+      "source": "app_flask_app",
+      "target": "db_user_keys",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 158",
+      "weight": 1.0
+    },
+    {
+      "source": "app_flask_app",
+      "target": "app_sse_progress",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 326",
+      "weight": 1.0
+    },
+    {
+      "source": "main_cli",
+      "target": "downloader_download_video",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "main.py",
+      "source_location": "line 115",
+      "weight": 1.0
+    },
+    {
+      "source": "main_cli",
+      "target": "transcriber_transcribe",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "main.py",
+      "source_location": "line 131",
+      "weight": 1.0
+    },
+    {
+      "source": "main_cli",
+      "target": "translator_translate_segments",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "main.py",
+      "source_location": "line 157",
+      "weight": 1.0
+    },
+    {
+      "source": "main_cli",
+      "target": "tts_engine_generate_tts_batch",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "main.py",
+      "source_location": "line 193",
+      "weight": 1.0
+    },
+    {
+      "source": "main_cli",
+      "target": "composer_compose_video",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "main.py",
+      "source_location": "line 227",
+      "weight": 1.0
+    },
+    {
+      "source": "downloader_download_video",
+      "target": "downloader_ytdlp_fallback",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "downloader.py",
+      "source_location": "line 345",
+      "weight": 1.0
+    },
+    {
+      "source": "downloader_download_audio_only",
+      "target": "downloader_ytdlp_fallback",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "downloader.py",
+      "source_location": "line 144",
+      "weight": 1.0
+    },
+    {
+      "source": "transcriber_transcribe",
+      "target": "transcriber_large_file_split",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "transcriber.py",
+      "source_location": "line 24",
+      "weight": 0.7
+    },
+    {
+      "source": "translator_translate_segments",
+      "target": "translator_system_prompt",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "translator.py",
+      "source_location": "line 73",
+      "weight": 1.0
+    },
+    {
+      "source": "tts_engine_generate_tts_batch",
+      "target": "tts_engine_speed_adjust",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tts_engine.py",
+      "source_location": "line 144",
+      "weight": 0.8
+    },
+    {
+      "source": "tts_engine_generate_tts_batch",
+      "target": "tts_engine_voice_presets",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tts_engine.py",
+      "source_location": "line 182",
+      "weight": 0.6
+    },
+    {
+      "source": "composer_compose_video",
+      "target": "composer_srt_generator",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "composer.py",
+      "source_location": "line 117",
+      "weight": 0.8
+    },
+    {
+      "source": "transcriber_transcribe",
+      "target": "segment_data_format",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "transcriber.py",
+      "source_location": "line 44",
+      "weight": 1.0
+    },
+    {
+      "source": "translator_translate_segments",
+      "target": "segment_data_format",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "translator.py",
+      "source_location": "line 98",
+      "weight": 1.0
+    },
+    {
+      "source": "tts_engine_generate_tts_batch",
+      "target": "segment_data_format",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tts_engine.py",
+      "source_location": "line 146",
+      "weight": 1.0
+    },
+    {
+      "source": "composer_compose_video",
+      "target": "segment_data_format",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "composer.py",
+      "source_location": "line 85",
+      "weight": 1.0
+    },
+    {
+      "source": "apify_download_get_transcript",
+      "target": "segment_data_format",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apify_download.py",
+      "source_location": "line 84",
+      "weight": 1.0
+    },
+    {
+      "source": "separator_separate_vocals",
+      "target": "cloud_separator_separate_vocals",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.92,
+      "source_file": "separator.py",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "downloader_download_audio_only",
+      "target": "apify_download_audio",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "downloader.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "downloader_download_video",
+      "target": "apify_download_video",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "downloader.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "apify_download_get_transcript",
+      "target": "transcriber_transcribe",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "apify_download.py",
+      "source_location": null,
+      "weight": 0.8
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "app_sse_progress",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 367",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_live_pipeline",
+      "target": "app_sse_progress",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 367",
+      "weight": 1.0
+    },
+    {
+      "source": "app_run_pipeline",
+      "target": "app_run_live_pipeline",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.82,
+      "source_file": "app.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "main_cli",
+      "target": "app_run_pipeline",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "main.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "app_user_class",
+      "target": "db_google_user",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "app.py",
+      "source_location": "line 53",
+      "weight": 0.8
+    },
+    {
+      "source": "db_user_keys",
+      "target": "app_run_pipeline",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 209",
+      "weight": 1.0
+    },
+    {
+      "source": "db_user_keys",
+      "target": "app_run_live_pipeline",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py",
+      "source_location": "line 265",
+      "weight": 1.0
+    },
+    {
+      "source": "translator_system_prompt",
+      "target": "translator_translate_segments",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "translator.py",
+      "source_location": "line 9",
+      "weight": 1.0
+    },
+    {
+      "source": "tts_engine_speed_adjust",
+      "target": "composer_compose_video",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "tts_engine.py",
+      "source_location": null,
+      "weight": 0.7
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "full_translation_pipeline",
+      "label": "5-Stage Video Translation Pipeline (Download -> Transcribe -> Translate -> TTS -> Compose)",
+      "nodes": [
+        "downloader_download_video",
+        "apify_download_video",
+        "transcriber_transcribe",
+        "translator_translate_segments",
+        "tts_engine_generate_tts_batch",
+        "composer_compose_video"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app.py"
+    },
+    {
+      "id": "download_fallback_chain",
+      "label": "Multi-Source Download Fallback Chain (Apify -> yt-dlp -> pytubefix)",
+      "nodes": [
+        "apify_download_video",
+        "apify_download_audio",
+        "downloader_download_video",
+        "downloader_download_audio_only",
+        "downloader_ytdlp_fallback"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "app.py"
+    },
+    {
+      "id": "vocal_separation_strategies",
+      "label": "Vocal Separation Strategies (Local Demucs vs Cloud Replicate)",
+      "nodes": [
+        "separator_separate_vocals",
+        "cloud_separator_separate_vocals"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "cloud_separator.py"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
